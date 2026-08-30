@@ -1,0 +1,33 @@
+{
+  "name": "comprovantes-extracao",
+  "version": "1.0.0",
+  "description": "Extrai valor de comprovantes (PDF/imagem) do WhatsApp via Z-API, deduplica, salva no Supabase + Google Sheets e envia relatório diário por email e WhatsApp",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
+    "@supabase/supabase-js": "^2.45.4",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.0",
+    "googleapis": "^144.0.0",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.15",
+    "pdfkit": "^0.20.1"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.4",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.7.4",
+    "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^6.4.16",
+    "@types/pdfkit": "^0.17.6",
+    "archiver": "^7.0.1",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  }
+}
