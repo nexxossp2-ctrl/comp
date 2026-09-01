@@ -94,6 +94,12 @@
     background:#fbe9dd;color:#8a3a10;border:1px solid #f0c8a8;border-radius:10px;
     padding:10px 14px;font-size:13px;margin-bottom:16px;
   }
+  .btn-excluir{
+    border:1px solid var(--line);background:var(--card);border-radius:7px;
+    padding:5px 10px;font-size:12px;cursor:pointer;color:#a33;white-space:nowrap;
+  }
+  .btn-excluir:hover{background:#fbe9dd;border-color:#f0c8a8}
+  .btn-excluir:disabled{opacity:.5;cursor:default}
 
   /* Setup / config modal */
   .overlay{
@@ -157,7 +163,7 @@
     <div class="section-head"><h2>Solicitado — ainda não pago</h2></div>
     <table>
       <thead>
-        <tr><th>Data</th><th>Empresa</th><th>Beneficiário</th><th>Remetente</th><th>Valor</th></tr>
+        <tr><th>Data</th><th>Empresa</th><th>Beneficiário</th><th>Remetente</th><th>Valor</th><th></th></tr>
       </thead>
       <tbody id="tbodySolicitado"></tbody>
     </table>
@@ -168,7 +174,7 @@
     <div class="section-head"><h2>Pago</h2></div>
     <table>
       <thead>
-        <tr><th>Data</th><th>Empresa</th><th>Beneficiário</th><th>Remetente</th><th>Valor</th></tr>
+        <tr><th>Data</th><th>Empresa</th><th>Beneficiário</th><th>Remetente</th><th>Valor</th><th></th></tr>
       </thead>
       <tbody id="tbodyPago"></tbody>
     </table>
@@ -288,15 +294,68 @@
     }
   }
 
+  function esc(s){
+    return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  }
+
   function linhaHtml(item, classe){
     return `<tr>
       <td class="data">${brDate(item.data)}</td>
-      <td><span class="badge ${classe}">${item._empresa}</span></td>
-      <td>${item.beneficiario || "-"}</td>
-      <td>${item.remetente || "-"}</td>
+      <td><span class="badge ${classe}">${esc(item._empresa)}</span></td>
+      <td>${esc(item.beneficiario) || "-"}</td>
+      <td>${esc(item.remetente) || "-"}</td>
       <td class="valor">${item.valor != null ? brl(item.valor) : "-"}</td>
+      <td><button class="btn-excluir" data-id="${esc(item.identificador)}" data-empresa="${esc(item._empresa)}">Excluir</button></td>
     </tr>`;
   }
+
+  function empresaPorNome(nome){
+    const cfg = loadConfig();
+    return cfg?.empresas?.find((e) => e.nome === nome) || null;
+  }
+
+  async function excluirItem(identificador, empresaNome, botao){
+    const empresa = empresaPorNome(empresaNome);
+    if(!empresa){
+      alert("Não achei a configuração dessa empresa. Recarregue a página.");
+      return;
+    }
+    const senha = prompt(`Pra excluir, digite de novo a senha do dashboard de ${empresa.nome}:`);
+    if(senha === null) return; // cancelou
+    if(!confirm("Confirma a exclusão? Essa ação não pode ser desfeita.")) return;
+
+    botao.disabled = true;
+    botao.textContent = "Excluindo...";
+    try {
+      const res = await fetch(`${empresa.url}/api/comprovantes/${encodeURIComponent(identificador)}`, {
+        method: "DELETE",
+        headers: { "X-Senha": senha },
+      });
+      if(res.status === 401){
+        alert("Senha incorreta — nada foi excluído.");
+        botao.disabled = false;
+        botao.textContent = "Excluir";
+        return;
+      }
+      if(!res.ok){
+        alert(`Não deu pra excluir (erro ${res.status}).`);
+        botao.disabled = false;
+        botao.textContent = "Excluir";
+        return;
+      }
+      carregar();
+    } catch(e){
+      alert(`Não deu pra excluir: ${e.message}`);
+      botao.disabled = false;
+      botao.textContent = "Excluir";
+    }
+  }
+
+  document.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".btn-excluir");
+    if(!btn) return;
+    excluirItem(btn.dataset.id, btn.dataset.empresa, btn);
+  });
 
   let carregando = false;
 
