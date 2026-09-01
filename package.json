@@ -16,7 +16,6 @@
     "express": "^4.21.0",
     "googleapis": "^144.0.0",
     "node-cron": "^3.0.3",
-    "nodemailer": "^6.9.15",
     "pdfkit": "^0.20.1"
   },
   "devDependencies": {
@@ -24,7 +23,6 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.7.4",
     "@types/node-cron": "^3.0.11",
-    "@types/nodemailer": "^6.4.16",
     "@types/pdfkit": "^0.17.6",
     "archiver": "^7.0.1",
     "tsx": "^4.19.1",
