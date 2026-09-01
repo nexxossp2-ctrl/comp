@@ -472,7 +472,9 @@ app.delete("/api/comprovantes/:id", async (req, res) => {
     const id = req.params.id;
     const r = await excluirComprovante(id);
     if (!r.ok) return res.status(404).json({ erro: "comprovante não encontrado" });
-    console.log(`[excluido] ${id} removido manualmente via dashboard`);
+    // A planilha NÃO é alterada aqui de propósito — fica como registro histórico
+    // de tudo que já passou pelo sistema, mesmo o que depois foi excluído do dashboard.
+    console.log(`[excluido] ${id} removido do dashboard (mantido na planilha como histórico)`);
     res.json({ ok: true });
   } catch (e) {
     console.error("[excluir] erro:", e);
