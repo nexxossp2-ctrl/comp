@@ -1,4 +1,5 @@
 import express from "express";
+import path from "path";
 import cron from "node-cron";
 import { createHash } from "crypto";
 import archiver from "archiver";
@@ -12,26 +13,33 @@ import { dataSP, dataBR } from "./util.js";
 
 const app = express();
 app.use(express.json({ limit: "25mb" }));
+// Serve arquivos estáticos da pasta public/ (ex: /dashboard-geral.html)
+app.use(express.static(path.join(process.cwd(), "public")));
 
 const GRUPO_ID = (process.env.GRUPO_ID || "").trim();
 
 type ResultadoProc =
-  | { status: "salvo"; valor: number | null; beneficiario: string | null }
+  | { status: "salvo"; tipo: "pago" | "solicitado"; valor: number | null; beneficiario: string | null }
   | { status: "ignorado" }
   | { status: "duplicado" };
 
 /**
  * Processamento único usado pelo WhatsApp e pelo upload:
- * classifica pago/boleto, deduplica e grava no banco + planilha.
+ * classifica pago/boleto/outro, deduplica e grava no banco (+ planilha, só quando pago).
+ * - tipo "pago": comprovante de pagamento já feito.
+ * - tipo "boleto": cobrança/fatura em aberto — vira uma "solicitação" (status="solicitado").
+ * - tipo "outro": não é documento financeiro, é descartado (não grava nada).
  */
 async function salvarProcessado(
   ex: Extracao,
   meta: { identificador: string; remetente: string; data: string; fileName?: string | null; mime: string; base64?: string },
 ): Promise<ResultadoProc> {
-  if (!ex.pago) {
-    console.log(`[ignorado] ${meta.identificador} não é comprovante pago (boleto/outro)`);
+  if (ex.tipo === "outro") {
+    console.log(`[ignorado] ${meta.identificador} não é comprovante nem boleto`);
     return { status: "ignorado" };
   }
+
+  const status: "pago" | "solicitado" = ex.tipo === "pago" ? "pago" : "solicitado";
 
   // Impressão digital do pagamento: data+hora+valor lidos do comprovante.
   // Só monta se tiver os três — senão fica null e não bloqueia nada.
@@ -45,15 +53,18 @@ async function salvarProcessado(
     ? await subirArquivo(meta.base64, meta.mime, meta.identificador)
     : null;
 
-  // Data do registro = data lida do comprovante (se válida AAAA-MM-DD);
-  // senão cai pra data de chegada.
-  const dataValida = /^\d{4}-\d{2}-\d{2}$/.test(ex.data_pagamento || "");
-  const dataFinal = dataValida ? (ex.data_pagamento as string) : meta.data;
+  // Data do registro: data de pagamento (pago), vencimento (boleto) — se vierem válidas;
+  // senão cai pra data de chegada da mensagem.
+  const dataCandidata = status === "pago" ? ex.data_pagamento : ex.data_vencimento;
+  const dataValida = /^\d{4}-\d{2}-\d{2}$/.test(dataCandidata || "");
+  const dataFinal = dataValida ? (dataCandidata as string) : meta.data;
 
   const inserido = await salvarComprovante({
     message_id: meta.identificador,
     valor: ex.valor,
     data: dataFinal,
+    status,
+    vencimento: status === "solicitado" ? ex.data_vencimento : null,
     beneficiario: ex.beneficiario,
     remetente: meta.remetente,
     fingerprint,
@@ -68,15 +79,19 @@ async function salvarProcessado(
     return { status: "duplicado" };
   }
 
-  await appendLinha({
-    data: dataFinal,
-    valor: ex.valor,
-    identificador: meta.identificador,
-    remetente: meta.remetente,
-    beneficiario: ex.beneficiario,
-  });
-  console.log(`[ok] ${meta.identificador} valor=${ex.valor ?? "null"} data=${dataFinal} (chegada=${meta.data})`);
-  return { status: "salvo", valor: ex.valor, beneficiario: ex.beneficiario };
+  // Planilha continua só com o que já foi pago (mantém o relatório/uso atual sem mudanças).
+  if (status === "pago") {
+    await appendLinha({
+      data: dataFinal,
+      valor: ex.valor,
+      identificador: meta.identificador,
+      remetente: meta.remetente,
+      beneficiario: ex.beneficiario,
+    });
+  }
+
+  console.log(`[ok] ${meta.identificador} status=${status} valor=${ex.valor ?? "null"} data=${dataFinal} (chegada=${meta.data})`);
+  return { status: "salvo", tipo: status, valor: ex.valor, beneficiario: ex.beneficiario };
 }
 
 /**
@@ -249,13 +264,20 @@ app.get("/api/comprovantes", async (req, res) => {
     const inicio = (req.query.inicio as string) || undefined;
     const fim = (req.query.fim as string) || undefined;
     const beneficiario = (req.query.beneficiario as string) || undefined;
+    // Compatibilidade: sem "status" na query, comportamento é IDÊNTICO ao de antes
+    // (só devolve o que já foi pago). "status=solicitado" pega só as cobranças em
+    // aberto. "status=todos" devolve os dois tipos juntos (usado pelo dashboard-geral).
+    const statusQuery = ((req.query.status as string) || "pago").toLowerCase();
+    const status = statusQuery === "todos" ? undefined : statusQuery;
 
-    const rows = await listarComprovantes({ inicio, fim, beneficiario });
+    const rows = await listarComprovantes({ inicio, fim, beneficiario, status });
 
     const comprovantes = await Promise.all(
       rows.map(async (r) => ({
         data: r.data,
         valor: r.valor,
+        status: r.status,
+        vencimento: r.vencimento,
         beneficiario: r.beneficiario,
         remetente: r.remetente,
         identificador: r.message_id,

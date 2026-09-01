@@ -9,6 +9,9 @@ export interface Comprovante {
   message_id: string;
   valor: number | null;
   data: string; // YYYY-MM-DD
+  /** "pago" = comprovante de pagamento já feito. "solicitado" = boleto/cobrança em aberto. */
+  status: "pago" | "solicitado";
+  vencimento?: string | null; // YYYY-MM-DD, só para status="solicitado"
   beneficiario?: string | null;
   remetente?: string | null;
   fingerprint?: string | null;
@@ -87,38 +90,46 @@ export interface ComprovanteRow {
   message_id: string;
   valor: number | null;
   data: string;
+  status: "pago" | "solicitado";
+  vencimento: string | null;
   beneficiario: string | null;
   remetente: string | null;
   arquivo_url: string | null;
 }
 
-/** Comprovantes de um dia (YYYY-MM-DD), na ordem em que chegaram. */
+const COLUNAS_LISTAGEM = "message_id, valor, data, status, vencimento, beneficiario, remetente, arquivo_url";
+
+/** Comprovantes PAGOS de um dia (YYYY-MM-DD), na ordem em que chegaram. Usado pelo relatório diário. */
 export async function comprovantesDoDia(data: string): Promise<ComprovanteRow[]> {
   const { data: rows, error } = await supabase
     .from("comprovantes")
-    .select("message_id, valor, data, beneficiario, remetente, arquivo_url")
+    .select(COLUNAS_LISTAGEM)
     .eq("data", data)
+    .eq("status", "pago")
     .order("created_at", { ascending: true });
 
   if (error) throw error;
   return rows ?? [];
 }
 
-/** Lista com filtros por intervalo de data e por beneficiário (para o dashboard). */
+/** Lista com filtros por intervalo de data, beneficiário e status (para o dashboard). */
 export async function listarComprovantes(opts: {
   inicio?: string;
   fim?: string;
   beneficiario?: string;
+  /** "pago" | "solicitado" filtra por tipo. Omitido = todos os status. */
+  status?: string;
 }): Promise<ComprovanteRow[]> {
   let q = supabase
     .from("comprovantes")
-    .select("message_id, valor, data, beneficiario, remetente, arquivo_url")
+    .select(COLUNAS_LISTAGEM)
     .order("data", { ascending: false })
     .order("created_at", { ascending: false });
 
   if (opts.inicio) q = q.gte("data", opts.inicio);
   if (opts.fim) q = q.lte("data", opts.fim);
   if (opts.beneficiario) q = q.ilike("beneficiario", `%${opts.beneficiario}%`);
+  if (opts.status) q = q.eq("status", opts.status);
 
   const { data: rows, error } = await q;
   if (error) throw error;
