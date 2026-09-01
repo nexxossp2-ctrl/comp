@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Dashboard Geral — Comprovantes</title>
+<title>Dashboard — Comprovantes</title>
 <style>
   :root{
     --bg:#F5F1E8;
@@ -18,8 +18,6 @@
     --pend-bg:#fbe9dd;
     --pago:#1f6b4a;
     --pago-bg:#e1f0e6;
-    --e1:#3457d5;
-    --e2:#b6531c;
   }
   *{box-sizing:border-box}
   body{
@@ -35,14 +33,12 @@
     text-transform:uppercase;margin:0 0 8px;
   }
   h1{font-size:34px;margin:0 0 6px;letter-spacing:-.01em}
-  .sub{color:var(--muted);margin:0 0 28px;font-size:15px}
-  .topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
-  .gear{
-    border:1px solid var(--line);background:var(--card);border-radius:10px;
-    width:40px;height:40px;display:flex;align-items:center;justify-content:center;
-    cursor:pointer;flex:none;font-size:18px;color:var(--ink);
+  .sub{color:var(--muted);margin:0 0 8px;font-size:15px}
+  .link-config{
+    background:none;border:none;padding:0;color:var(--muted);font-size:13px;
+    text-decoration:underline;cursor:pointer;margin-bottom:28px;display:inline-block;
   }
-  .gear:hover{background:var(--line)}
+  .link-config:hover{color:var(--ink)}
 
   .filters{
     display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-bottom:24px;
@@ -73,12 +69,6 @@
   section{margin-bottom:36px}
   .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
   .section-head h2{font-size:18px;margin:0}
-  .badge{
-    display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;
-    padding:3px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.03em;
-  }
-  .badge.e1{background:#e7ecfb;color:var(--e1)}
-  .badge.e2{background:var(--pend-bg);color:var(--e2)}
 
   table{width:100%;border-collapse:collapse;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
   th,td{text-align:left;padding:11px 14px;font-size:13.5px;border-bottom:1px solid var(--line)}
@@ -87,9 +77,6 @@
   td.valor{font-weight:700;white-space:nowrap}
   td.data{white-space:nowrap;color:var(--muted)}
   .empty{padding:24px;text-align:center;color:var(--muted);font-size:14px}
-  .status-pill{font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px}
-  .status-pill.pend{background:var(--pend-bg);color:var(--pend)}
-  .status-pill.pago{background:var(--pago-bg);color:var(--pago)}
   .warn{
     background:#fbe9dd;color:#8a3a10;border:1px solid #f0c8a8;border-radius:10px;
     padding:10px 14px;font-size:13px;margin-bottom:16px;
@@ -101,35 +88,35 @@
   .btn-excluir:hover{background:#fbe9dd;border-color:#f0c8a8}
   .btn-excluir:disabled{opacity:.5;cursor:default}
 
-  /* Setup / config modal */
-  .overlay{
-    position:fixed;inset:0;background:rgba(23,21,18,.45);display:flex;
-    align-items:center;justify-content:center;padding:20px;z-index:20;
+  .config-box{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:22px;margin-bottom:28px;max-width:520px;
   }
-  .modal{
-    background:var(--card);border-radius:16px;padding:28px;max-width:520px;width:100%;
-    max-height:90vh;overflow:auto;
-  }
-  .modal h2{margin:0 0 4px;font-size:20px}
-  .modal p.hint{color:var(--muted);font-size:13px;margin:0 0 20px}
-  .empresa-block{border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
-  .empresa-block h3{margin:0 0 12px;font-size:14px}
-  .empresa-block .field{margin-bottom:10px;width:100%}
-  .empresa-block input{width:100%}
-  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px}
+  .config-box h2{margin:0 0 4px;font-size:18px}
+  .config-box p.hint{color:var(--muted);font-size:13px;margin:0 0 18px}
+  .config-box .field{margin-bottom:12px;width:100%}
+  .config-box input{width:100%}
+  .config-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px}
   [hidden]{display:none!important}
 </style>
 </head>
 <body>
 
 <div class="wrap">
-  <div class="topbar">
-    <div>
-      <p class="eyebrow">Visão geral</p>
-      <h1>Dashboard geral</h1>
-      <p class="sub">Solicitações e pagamentos das duas empresas, numa tela só.</p>
+  <p class="eyebrow">Visão geral</p>
+  <h1>Dashboard</h1>
+  <p class="sub">Solicitações e pagamentos, numa tela só.</p>
+  <button class="link-config" id="btnConfig">Alterar dados de acesso</button>
+
+  <div class="config-box" id="configBox" hidden>
+    <h2>Dados de acesso</h2>
+    <p class="hint">Cole a URL da API e a senha do dashboard (Railway → variável <code>DASHBOARD_SENHA</code>). Fica salvo só neste navegador.</p>
+    <div class="field"><label>URL da API</label><input id="cfgUrl" placeholder="https://seu-servico.up.railway.app" /></div>
+    <div class="field"><label>Senha do dashboard</label><input id="cfgSenha" type="password" placeholder="DASHBOARD_SENHA" /></div>
+    <div class="config-actions">
+      <button class="btn secondary" id="btnFecharConfig" hidden>Cancelar</button>
+      <button class="btn" id="btnSalvarConfig">Salvar</button>
     </div>
-    <button class="gear" id="btnConfig" title="Configurar empresas">⚙</button>
   </div>
 
   <div id="warnBox"></div>
@@ -163,7 +150,7 @@
     <div class="section-head"><h2>Solicitado — ainda não pago</h2></div>
     <table>
       <thead>
-        <tr><th>Data</th><th>Empresa</th><th>Beneficiário</th><th>Remetente</th><th>Valor</th><th></th></tr>
+        <tr><th>Data</th><th>Beneficiário</th><th>Remetente</th><th>Valor</th><th></th></tr>
       </thead>
       <tbody id="tbodySolicitado"></tbody>
     </table>
@@ -174,7 +161,7 @@
     <div class="section-head"><h2>Pago</h2></div>
     <table>
       <thead>
-        <tr><th>Data</th><th>Empresa</th><th>Beneficiário</th><th>Remetente</th><th>Valor</th><th></th></tr>
+        <tr><th>Data</th><th>Beneficiário</th><th>Remetente</th><th>Valor</th><th></th></tr>
       </thead>
       <tbody id="tbodyPago"></tbody>
     </table>
@@ -182,35 +169,9 @@
   </section>
 </div>
 
-<div class="overlay" id="overlay" hidden>
-  <div class="modal">
-    <h2>Configurar empresas</h2>
-    <p class="hint">Cole a URL da API e a senha do dashboard de cada empresa (Railway → variáveis <code>DASHBOARD_SENHA</code>). Fica salvo só neste navegador.</p>
-
-    <div class="empresa-block">
-      <h3>Empresa 1</h3>
-      <div class="field"><label>Nome</label><input id="e1nome" placeholder="Ex: Empresa A" /></div>
-      <div class="field"><label>URL da API</label><input id="e1url" placeholder="https://seu-servico.up.railway.app" /></div>
-      <div class="field"><label>Senha do dashboard</label><input id="e1senha" type="password" placeholder="DASHBOARD_SENHA" /></div>
-    </div>
-
-    <div class="empresa-block">
-      <h3>Empresa 2</h3>
-      <div class="field"><label>Nome</label><input id="e2nome" placeholder="Ex: Empresa B" /></div>
-      <div class="field"><label>URL da API</label><input id="e2url" placeholder="https://outro-servico.up.railway.app" /></div>
-      <div class="field"><label>Senha do dashboard</label><input id="e2senha" type="password" placeholder="DASHBOARD_SENHA" /></div>
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn secondary" id="btnFechar">Cancelar</button>
-      <button class="btn" id="btnSalvar">Salvar</button>
-    </div>
-  </div>
-</div>
-
 <script>
 (function(){
-  const LS_KEY = "dashboardGeralConfig";
+  const LS_KEY = "dashboardConfig";
   const brl = (n) => (Number(n)||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
   const brDate = (iso) => { if(!iso) return "-"; const [y,m,d]=iso.split("-"); return d+"/"+m+"/"+y; };
 
@@ -221,73 +182,62 @@
     try { localStorage.setItem(LS_KEY, JSON.stringify(cfg)); } catch(e){}
   }
 
-  const overlay = document.getElementById("overlay");
+  const configBox = document.getElementById("configBox");
   const btnConfig = document.getElementById("btnConfig");
-  const btnFechar = document.getElementById("btnFechar");
-  const btnSalvar = document.getElementById("btnSalvar");
+  const btnFecharConfig = document.getElementById("btnFecharConfig");
+  const btnSalvarConfig = document.getElementById("btnSalvarConfig");
 
-  function openConfig(prefill){
-    const cfg = prefill || loadConfig();
-    if(cfg && cfg.empresas){
-      document.getElementById("e1nome").value = cfg.empresas[0]?.nome || "";
-      document.getElementById("e1url").value = cfg.empresas[0]?.url || "";
-      document.getElementById("e1senha").value = cfg.empresas[0]?.senha || "";
-      document.getElementById("e2nome").value = cfg.empresas[1]?.nome || "";
-      document.getElementById("e2url").value = cfg.empresas[1]?.url || "";
-      document.getElementById("e2senha").value = cfg.empresas[1]?.senha || "";
-    }
-    overlay.hidden = false;
-  }
-  function closeConfig(){ overlay.hidden = true; }
-
-  btnConfig.addEventListener("click", () => openConfig());
-  btnFechar.addEventListener("click", () => {
+  function abrirConfig(){
     const cfg = loadConfig();
-    if(cfg){ closeConfig(); } // só fecha se já existir config salva antes
-  });
-  btnSalvar.addEventListener("click", () => {
+    if(cfg){
+      document.getElementById("cfgUrl").value = cfg.url || "";
+      document.getElementById("cfgSenha").value = cfg.senha || "";
+      btnFecharConfig.hidden = false;
+    } else {
+      btnFecharConfig.hidden = true; // primeira vez, não tem o que cancelar
+    }
+    configBox.hidden = false;
+  }
+  function fecharConfig(){ configBox.hidden = true; }
+
+  btnConfig.addEventListener("click", abrirConfig);
+  btnFecharConfig.addEventListener("click", fecharConfig);
+  btnSalvarConfig.addEventListener("click", () => {
     const cfg = {
-      empresas: [
-        { nome: document.getElementById("e1nome").value.trim() || "Empresa 1",
-          url: document.getElementById("e1url").value.trim().replace(/\/$/,""),
-          senha: document.getElementById("e1senha").value },
-        { nome: document.getElementById("e2nome").value.trim() || "Empresa 2",
-          url: document.getElementById("e2url").value.trim().replace(/\/$/,""),
-          senha: document.getElementById("e2senha").value },
-      ]
+      url: document.getElementById("cfgUrl").value.trim().replace(/\/$/,""),
+      senha: document.getElementById("cfgSenha").value,
     };
+    if(!cfg.url){
+      alert("Preencha a URL da API.");
+      return;
+    }
     saveConfig(cfg);
-    closeConfig();
+    fecharConfig();
     carregar();
   });
 
-  function empresaClasse(i){ return i===0 ? "e1" : "e2"; }
-
-  // Timeout de segurança: se uma empresa não responder, não trava a tela toda —
-  // essa empresa entra com erro e a outra continua aparecendo normalmente.
+  // Timeout de segurança: se a API não responder, a tela não fica travada esperando.
   const TIMEOUT_MS = 15000;
 
-  async function buscarEmpresa(empresa, inicio, fim){
-    if(!empresa.url) return { itens: [], erro: null };
+  async function buscarDados(cfg, inicio, fim){
     const params = new URLSearchParams({ status: "todos" });
     if(inicio) params.set("inicio", inicio);
     if(fim) params.set("fim", fim);
-    const url = empresa.url + "/api/comprovantes?" + params.toString();
+    const url = cfg.url + "/api/comprovantes?" + params.toString();
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
-      const res = await fetch(url, { headers: { "X-Senha": empresa.senha || "" }, signal: controller.signal });
+      const res = await fetch(url, { headers: { "X-Senha": cfg.senha || "" }, signal: controller.signal });
       if(!res.ok){
-        return { itens: [], erro: `${empresa.nome}: erro ${res.status} ao consultar a API.` };
+        return { itens: [], erro: `Erro ${res.status} ao consultar a API.` };
       }
       const data = await res.json();
-      const itens = (data.comprovantes || []).map(c => ({...c, _empresa: empresa.nome}));
-      return { itens, erro: null };
+      return { itens: data.comprovantes || [], erro: null };
     } catch(e){
       const msg = e.name === "AbortError"
-        ? `${empresa.nome}: não respondeu em ${TIMEOUT_MS/1000}s (serviço fora do ar ou "dormindo" no Railway — tente de novo em instantes).`
-        : `${empresa.nome}: não foi possível conectar (${e.message}).`;
+        ? `Não respondeu em ${TIMEOUT_MS/1000}s (serviço fora do ar ou "dormindo" no Railway — tente de novo em instantes).`
+        : `Não foi possível conectar (${e.message}).`;
       return { itens: [], erro: msg };
     } finally {
       clearTimeout(timer);
@@ -298,36 +248,30 @@
     return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
   }
 
-  function linhaHtml(item, classe){
+  function linhaHtml(item){
     return `<tr>
       <td class="data">${brDate(item.data)}</td>
-      <td><span class="badge ${classe}">${esc(item._empresa)}</span></td>
       <td>${esc(item.beneficiario) || "-"}</td>
       <td>${esc(item.remetente) || "-"}</td>
       <td class="valor">${item.valor != null ? brl(item.valor) : "-"}</td>
-      <td><button class="btn-excluir" data-id="${esc(item.identificador)}" data-empresa="${esc(item._empresa)}">Excluir</button></td>
+      <td><button class="btn-excluir" data-id="${esc(item.identificador)}">Excluir</button></td>
     </tr>`;
   }
 
-  function empresaPorNome(nome){
+  async function excluirItem(identificador, botao){
     const cfg = loadConfig();
-    return cfg?.empresas?.find((e) => e.nome === nome) || null;
-  }
-
-  async function excluirItem(identificador, empresaNome, botao){
-    const empresa = empresaPorNome(empresaNome);
-    if(!empresa){
-      alert("Não achei a configuração dessa empresa. Recarregue a página.");
+    if(!cfg){
+      alert("Configuração não encontrada. Recarregue a página.");
       return;
     }
-    const senha = prompt(`Pra excluir, digite de novo a senha do dashboard de ${empresa.nome}:`);
+    const senha = prompt("Pra excluir, digite de novo a senha do dashboard:");
     if(senha === null) return; // cancelou
     if(!confirm("Confirma a exclusão? Essa ação não pode ser desfeita.")) return;
 
     botao.disabled = true;
     botao.textContent = "Excluindo...";
     try {
-      const res = await fetch(`${empresa.url}/api/comprovantes/${encodeURIComponent(identificador)}`, {
+      const res = await fetch(`${cfg.url}/api/comprovantes/${encodeURIComponent(identificador)}`, {
         method: "DELETE",
         headers: { "X-Senha": senha },
       });
@@ -354,7 +298,7 @@
   document.addEventListener("click", (ev) => {
     const btn = ev.target.closest(".btn-excluir");
     if(!btn) return;
-    excluirItem(btn.dataset.id, btn.dataset.empresa, btn);
+    excluirItem(btn.dataset.id, btn);
   });
 
   let carregando = false;
@@ -367,8 +311,8 @@
     const warnBox = document.getElementById("warnBox");
     warnBox.innerHTML = "";
 
-    if(!cfg || !cfg.empresas || !cfg.empresas[0]?.url){
-      openConfig();
+    if(!cfg || !cfg.url){
+      abrirConfig();
       return;
     }
 
@@ -382,19 +326,11 @@
       const inicio = document.getElementById("inicio").value;
       const fim = document.getElementById("fim").value;
 
-      const resultados = await Promise.all(
-        cfg.empresas.map((e) => buscarEmpresa(e, inicio, fim))
-      );
-
-      const erros = resultados.map(r => r.erro).filter(Boolean);
-      if(erros.length){
-        warnBox.innerHTML = `<div class="warn">${erros.join("<br>")}</div>`;
+      const resultado = await buscarDados(cfg, inicio, fim);
+      if(resultado.erro){
+        warnBox.innerHTML = `<div class="warn">${resultado.erro}</div>`;
       }
-
-      const todos = resultados.flatMap((r, i) =>
-        r.itens.map(it => ({ ...it, _classe: empresaClasse(cfg.empresas.findIndex(e => e.nome === it._empresa)) }))
-      );
-      renderizar(todos);
+      renderizar(resultado.itens);
     } catch(e){
       warnBox.innerHTML = `<div class="warn">Erro inesperado ao carregar: ${e.message}</div>`;
     } finally {
@@ -405,7 +341,6 @@
   }
 
   function renderizar(todos){
-
     const solicitados = todos.filter(i => i.status === "solicitado")
       .sort((a,b) => (b.data||"").localeCompare(a.data||""));
     const pagos = todos.filter(i => i.status === "pago")
@@ -421,8 +356,8 @@
 
     const tbodySolicitado = document.getElementById("tbodySolicitado");
     const tbodyPago = document.getElementById("tbodyPago");
-    tbodySolicitado.innerHTML = solicitados.map(i => linhaHtml(i, i._classe)).join("");
-    tbodyPago.innerHTML = pagos.map(i => linhaHtml(i, i._classe)).join("");
+    tbodySolicitado.innerHTML = solicitados.map(linhaHtml).join("");
+    tbodyPago.innerHTML = pagos.map(linhaHtml).join("");
 
     document.getElementById("emptySolicitado").hidden = solicitados.length !== 0;
     document.getElementById("emptyPago").hidden = pagos.length !== 0;
