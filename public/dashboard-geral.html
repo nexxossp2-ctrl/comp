@@ -67,10 +67,12 @@
 
   .grid-topo{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-bottom:24px}
   @media (max-width:720px){ .grid-topo{grid-template-columns:1fr} }
+  .duas-cards{display:flex;flex-direction:column;gap:14px}
   .card-total{background:var(--dark);color:var(--dark-ink);border-radius:14px;padding:20px}
   .card-total .label{font-size:13px;opacity:.7;margin-bottom:10px}
   .card-total .value{font-size:28px;font-weight:700;letter-spacing:-.02em}
   .card-total .count{font-size:13px;opacity:.65;margin-top:6px}
+  .card-total.pend{background:var(--pend)}
 
   .painel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
   .painel h3{margin:0 0 12px;font-size:14px}
@@ -141,6 +143,23 @@
   .fila-status.aviso{color:var(--pend)}
   .fila-status.erro{color:#a33}
 
+  .visor-overlay{
+    position:fixed;inset:0;background:rgba(23,21,18,.55);display:flex;
+    align-items:center;justify-content:center;padding:24px;z-index:30;
+  }
+  .visor-box{
+    background:var(--card);border-radius:14px;width:100%;max-width:640px;
+    max-height:85vh;display:flex;flex-direction:column;overflow:hidden;
+  }
+  .visor-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .visor-head span{font-size:13px;color:var(--muted)}
+  .visor-fechar{border:none;background:none;font-size:20px;line-height:1;cursor:pointer;color:var(--muted);padding:4px}
+  .visor-fechar:hover{color:var(--ink)}
+  .visor-corpo{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:#faf8f2;min-height:200px}
+  .visor-corpo img{max-width:100%;max-height:70vh;display:block}
+  .visor-corpo iframe{width:100%;height:70vh;border:none}
+  .visor-rodape{display:flex;justify-content:flex-end;gap:10px;padding:12px 16px;border-top:1px solid var(--line)}
+
   [hidden]{display:none!important}
 </style>
 </head>
@@ -181,10 +200,17 @@
     </div>
 
     <div class="grid-topo">
-      <div class="card-total">
-        <div class="label">Total no filtro atual</div>
-        <div class="value" id="pagoTotal">R$ 0,00</div>
-        <div class="count" id="pagoQtd">0 comprovantes</div>
+      <div class="duas-cards">
+        <div class="card-total">
+          <div class="label">Total pago no filtro</div>
+          <div class="value" id="pagoTotal">R$ 0,00</div>
+          <div class="count" id="pagoQtd">0 comprovantes</div>
+        </div>
+        <div class="card-total pend">
+          <div class="label">Total solicitado no filtro</div>
+          <div class="value" id="pagoSolicitadoTotal">R$ 0,00</div>
+          <div class="count" id="pagoSolicitadoQtd">0 solicitações</div>
+        </div>
       </div>
       <div class="painel">
         <h3>Soma por beneficiário</h3>
@@ -261,6 +287,20 @@
     </div>
 
     <div class="fila" id="fila"></div>
+  </div>
+</div>
+
+<div class="visor-overlay" id="visorOverlay" hidden>
+  <div class="visor-box">
+    <div class="visor-head">
+      <span>Comprovante</span>
+      <button class="visor-fechar" id="btnFecharVisor" title="Fechar">✕</button>
+    </div>
+    <div class="visor-corpo" id="visorCorpo"></div>
+    <div class="visor-rodape">
+      <button class="btn secondary small" id="btnVisorOriginal">Visualizar tamanho original</button>
+      <button class="btn small" id="btnFecharVisor2">Fechar</button>
+    </div>
   </div>
 </div>
 
@@ -425,10 +465,19 @@
     btn.textContent = "Carregando...";
 
     try {
-      const dados = await buscarLista("pago", { inicio, fim, beneficiario });
+      const [dados, dadosSolicitado] = await Promise.all([
+        buscarLista("pago", { inicio, fim, beneficiario }),
+        buscarLista("solicitado", { inicio, fim, beneficiario }),
+      ]);
       if(!dados){ abrirConfig(); return; }
-      if(dados.erro){ mostrarAviso(dados.erro); renderizarPago([], 0, 0, []); return; }
-      renderizarPago(dados.comprovantes || [], dados.total || 0, dados.quantidade || 0, dados.porBeneficiario || []);
+      if(dados.erro){ mostrarAviso(dados.erro); renderizarPago([], 0, 0, []); }
+      else renderizarPago(dados.comprovantes || [], dados.total || 0, dados.quantidade || 0, dados.porBeneficiario || []);
+
+      if(dadosSolicitado && !dadosSolicitado.erro){
+        document.getElementById("pagoSolicitadoTotal").textContent = brl(dadosSolicitado.total || 0);
+        const q = dadosSolicitado.quantidade || 0;
+        document.getElementById("pagoSolicitadoQtd").textContent = q + (q === 1 ? " solicitação" : " solicitações");
+      }
     } catch(e){
       mostrarAviso(`Erro inesperado: ${e.message}`);
     } finally {
@@ -487,8 +536,37 @@
     if(!linha) return;
     const arquivos = JSON.parse(document.getElementById("tbodyPago").dataset.arquivos || "{}");
     const url = arquivos[linha.dataset.id];
-    if(url) window.open(url, "_blank");
+    if(url) abrirVisualizador(url);
     else alert("Esse comprovante não tem arquivo anexado.");
+  });
+
+  // ---- Pop-up de visualização (menor) + botão pra abrir em tamanho original ----
+  const visorOverlay = document.getElementById("visorOverlay");
+  const visorCorpo = document.getElementById("visorCorpo");
+  let visorUrlAtual = null;
+
+  function ehPdf(url){
+    return url.split("?")[0].toLowerCase().endsWith(".pdf");
+  }
+
+  function abrirVisualizador(url){
+    visorUrlAtual = url;
+    visorCorpo.innerHTML = ehPdf(url)
+      ? `<iframe src="${esc(url)}"></iframe>`
+      : `<img src="${esc(url)}" alt="Comprovante" />`;
+    visorOverlay.hidden = false;
+  }
+  function fecharVisualizador(){
+    visorOverlay.hidden = true;
+    visorCorpo.innerHTML = "";
+    visorUrlAtual = null;
+  }
+
+  document.getElementById("btnFecharVisor").addEventListener("click", fecharVisualizador);
+  document.getElementById("btnFecharVisor2").addEventListener("click", fecharVisualizador);
+  visorOverlay.addEventListener("click", (ev) => { if(ev.target === visorOverlay) fecharVisualizador(); });
+  document.getElementById("btnVisorOriginal").addEventListener("click", () => {
+    if(visorUrlAtual) window.open(visorUrlAtual, "_blank");
   });
 
   // ---- Relatório (PDF/XLSX, baixar ou enviar por email) ----
@@ -523,7 +601,12 @@
         body: JSON.stringify({ ids, formato, ...(email ? { enviarEmail: email } : {}) }),
       });
       if(res.status === 401){ alert("Senha incorreta."); return; }
-      if(!res.ok){ alert(`Não deu pra gerar o relatório (erro ${res.status}).`); return; }
+      if(!res.ok){
+        let detalhe = `erro ${res.status}`;
+        try { const corpo = await res.json(); if(corpo?.erro) detalhe = corpo.erro; } catch(e){}
+        alert(`Não deu pra gerar o relatório: ${detalhe}`);
+        return;
+      }
 
       if(email){
         const data = await res.json();
