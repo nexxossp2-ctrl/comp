@@ -4,7 +4,7 @@ import cron from "node-cron";
 import { createHash } from "crypto";
 import archiver from "archiver";
 import { extrairBase64, baixarBase64, type Extracao } from "./extract.js";
-import { salvarComprovante, listarComprovantes, subirArquivo, linkAssinado, comprovantesPorIds, baixarArquivo } from "./supabase.js";
+import { salvarComprovante, listarComprovantes, subirArquivo, linkAssinado, comprovantesPorIds, baixarArquivo, excluirComprovante } from "./supabase.js";
 import { gerarPDF, gerarXLSX, type ItemRelatorio } from "./relatorio-arquivo.js";
 import { appendLinha } from "./sheets.js";
 import { gerarRelatorio } from "./report.js";
@@ -449,6 +449,33 @@ app.post("/api/relatorio", async (req, res) => {
     }
   } catch (e) {
     console.error("[relatorio] erro:", e);
+    if (!res.headersSent) res.status(500).json({ erro: String(e) });
+  }
+});
+
+// Exclusão manual de um comprovante/solicitação (ex: enviado no grupo errado).
+// Exige a mesma senha do dashboard, reenviada no momento da exclusão (não fica
+// gravada em botão nenhum) — evita apagar por clique errado.
+app.options("/api/comprovantes/:id", (_req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "DELETE, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type, X-Senha");
+  res.sendStatus(204);
+});
+
+app.delete("/api/comprovantes/:id", async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  if (!autorizadoDashboard(req)) {
+    return res.status(401).json({ erro: "não autorizado" });
+  }
+  try {
+    const id = req.params.id;
+    const r = await excluirComprovante(id);
+    if (!r.ok) return res.status(404).json({ erro: "comprovante não encontrado" });
+    console.log(`[excluido] ${id} removido manualmente via dashboard`);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[excluir] erro:", e);
     if (!res.headersSent) res.status(500).json({ erro: String(e) });
   }
 });

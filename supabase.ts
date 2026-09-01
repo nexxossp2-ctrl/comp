@@ -86,6 +86,33 @@ export async function salvarComprovante(c: Comprovante): Promise<boolean> {
   throw error;
 }
 
+/**
+ * Apaga um comprovante/solicitação pelo message_id, e o arquivo associado no Storage
+ * (best-effort — se a remoção do arquivo falhar, o registro já foi apagado mesmo assim).
+ * Usado pela exclusão manual no dashboard, protegida por senha no endpoint.
+ */
+export async function excluirComprovante(messageId: string): Promise<{ ok: boolean }> {
+  const { data: row, error: errBusca } = await supabase
+    .from("comprovantes")
+    .select("arquivo_url")
+    .eq("message_id", messageId)
+    .maybeSingle();
+  if (errBusca) throw errBusca;
+  if (!row) return { ok: false };
+
+  const { error } = await supabase.from("comprovantes").delete().eq("message_id", messageId);
+  if (error) throw error;
+
+  if (row.arquivo_url) {
+    try {
+      await supabase.storage.from("comprovantes").remove([row.arquivo_url]);
+    } catch (e) {
+      console.error("[storage] falha ao remover arquivo:", e);
+    }
+  }
+  return { ok: true };
+}
+
 export interface ComprovanteRow {
   message_id: string;
   valor: number | null;
