@@ -356,6 +356,7 @@ app.get("/api/comprovantes", async (req, res) => {
 
     res.json({ comprovantes, total, quantidade: comprovantes.length, porBeneficiario });
   } catch (e) {
+    console.error("[comprovantes] erro:", e);
     res.status(500).json({ erro: String(e) });
   }
 });
@@ -429,7 +430,8 @@ app.post("/api/upload", async (req, res) => {
     }
     return res.json({ ok: true, valor: ex.valor, beneficiario: ex.beneficiario });
   } catch (e) {
-    res.status(500).json({ erro: String(e) });
+    console.error("[upload] erro:", e);
+    if (!res.headersSent) res.status(500).json({ erro: String(e) });
   }
 });
 
@@ -545,6 +547,7 @@ app.get("/relatorio/preview", async (req, res) => {
     const { texto } = await gerarRelatorio(data);
     res.type("text/plain").send(texto);
   } catch (e) {
+    console.error("[relatorio/preview] erro:", e);
     res.status(500).send(String(e));
   }
 });
