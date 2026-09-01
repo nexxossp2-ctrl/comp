@@ -222,20 +222,23 @@
       <h2>Lista de comprovantes</h2>
       <div class="lista-acoes">
         <span id="pagoSelecionados" style="font-size:13px;color:var(--muted)"></span>
+        <button class="btn secondary small" id="btnEnviarComprovantes">Enviar comprovantes selecionados</button>
         <button class="btn secondary small" id="btnAbrirRelatorio">Gerar relatório</button>
       </div>
     </div>
 
     <div class="relatorio-box" id="relatorioBox">
       <div class="field">
-        <label>Formato</label>
+        <label>Formato do relatório</label>
         <select id="relatorioFormato"><option value="pdf">PDF</option><option value="xlsx">XLSX</option></select>
       </div>
+      <button class="btn secondary small" id="btnBaixarRelatorio">Baixar</button>
+      <span style="color:var(--muted);font-size:13px">ou</span>
       <div class="field">
-        <label>Email (opcional, pra enviar em vez de baixar)</label>
+        <label>Email de destino</label>
         <input type="email" id="relatorioEmail" placeholder="alguem@empresa.com" />
       </div>
-      <button class="btn small" id="btnGerarRelatorio">Gerar</button>
+      <button class="btn small" id="btnEnviarRelatorio">Enviar relatório por email</button>
     </div>
 
     <table>
@@ -575,44 +578,47 @@
     relatorioBox.classList.toggle("aberta");
   });
 
-  document.getElementById("btnGerarRelatorio").addEventListener("click", async () => {
-    const cfg = loadConfig();
-    if(!cfg){ alert("Configuração não encontrada."); return; }
-
+  function idsParaAcao(mensagemSeVazio){
     let ids = Array.from(selecionados);
     if(ids.length === 0){
       // nada selecionado: usa tudo que está na lista carregada agora
       const arquivos = JSON.parse(document.getElementById("tbodyPago").dataset.arquivos || "{}");
       ids = Object.keys(arquivos);
     }
-    if(ids.length === 0){ alert("Não há comprovantes pra incluir no relatório."); return; }
+    if(ids.length === 0) alert(mensagemSeVazio);
+    return ids;
+  }
 
-    const formato = document.getElementById("relatorioFormato").value;
-    const email = document.getElementById("relatorioEmail").value.trim();
-    const btn = document.getElementById("btnGerarRelatorio");
+  async function comBotao(btn, textoOcupado, fn){
     btn.disabled = true;
     const original = btn.textContent;
-    btn.textContent = "Gerando...";
+    btn.textContent = textoOcupado;
+    try { await fn(); }
+    finally { btn.disabled = false; btn.textContent = original; }
+  }
 
-    try {
-      const res = await fetch(`${cfg.url}/api/relatorio`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Senha": cfg.senha || "" },
-        body: JSON.stringify({ ids, formato, ...(email ? { enviarEmail: email } : {}) }),
-      });
-      if(res.status === 401){ alert("Senha incorreta."); return; }
-      if(!res.ok){
-        let detalhe = `erro ${res.status}`;
-        try { const corpo = await res.json(); if(corpo?.erro) detalhe = corpo.erro; } catch(e){}
-        alert(`Não deu pra gerar o relatório: ${detalhe}`);
-        return;
-      }
+  // ---- Relatório (resumo em PDF/XLSX): baixar OU enviar por email ----
+  document.getElementById("btnBaixarRelatorio").addEventListener("click", async () => {
+    const cfg = loadConfig();
+    if(!cfg){ alert("Configuração não encontrada."); return; }
+    const ids = idsParaAcao("Não há comprovantes pra incluir no relatório.");
+    if(ids.length === 0) return;
+    const formato = document.getElementById("relatorioFormato").value;
 
-      if(email){
-        const data = await res.json();
-        mostrarAviso(null);
-        document.getElementById("warnBox").innerHTML = `<div class="info">Relatório enviado para ${esc(data.enviadoPara)}.</div>`;
-      } else {
+    await comBotao(document.getElementById("btnBaixarRelatorio"), "Gerando...", async () => {
+      try {
+        const res = await fetch(`${cfg.url}/api/relatorio`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Senha": cfg.senha || "" },
+          body: JSON.stringify({ ids, formato }),
+        });
+        if(res.status === 401){ alert("Senha incorreta."); return; }
+        if(!res.ok){
+          let detalhe = `erro ${res.status}`;
+          try { const corpo = await res.json(); if(corpo?.erro) detalhe = corpo.erro; } catch(e){}
+          alert(`Não deu pra gerar o relatório: ${detalhe}`);
+          return;
+        }
         const blob = await res.blob();
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
@@ -620,14 +626,77 @@
         document.body.appendChild(a);
         a.click();
         a.remove();
+        relatorioBox.classList.remove("aberta");
+      } catch(e){
+        alert(`Erro ao gerar relatório: ${e.message}`);
       }
-      relatorioBox.classList.remove("aberta");
-    } catch(e){
-      alert(`Erro ao gerar relatório: ${e.message}`);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = original;
+    });
+  });
+
+  document.getElementById("btnEnviarRelatorio").addEventListener("click", async () => {
+    const cfg = loadConfig();
+    if(!cfg){ alert("Configuração não encontrada."); return; }
+    const ids = idsParaAcao("Não há comprovantes pra incluir no relatório.");
+    if(ids.length === 0) return;
+    const email = document.getElementById("relatorioEmail").value.trim();
+    if(!email){ alert("Preencha o email de destino."); return; }
+    const formato = document.getElementById("relatorioFormato").value;
+
+    await comBotao(document.getElementById("btnEnviarRelatorio"), "Enviando...", async () => {
+      try {
+        const res = await fetch(`${cfg.url}/api/relatorio`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Senha": cfg.senha || "" },
+          body: JSON.stringify({ ids, formato, enviarEmail: email }),
+        });
+        if(res.status === 401){ alert("Senha incorreta."); return; }
+        if(!res.ok){
+          let detalhe = `erro ${res.status}`;
+          try { const corpo = await res.json(); if(corpo?.erro) detalhe = corpo.erro; } catch(e){}
+          alert(`Não deu pra enviar o relatório: ${detalhe}`);
+          return;
+        }
+        const data = await res.json();
+        document.getElementById("warnBox").innerHTML = `<div class="info">Relatório enviado para ${esc(data.enviadoPara)}.</div>`;
+        relatorioBox.classList.remove("aberta");
+      } catch(e){
+        alert(`Erro ao enviar relatório: ${e.message}`);
+      }
+    });
+  });
+
+  // ---- Enviar os COMPROVANTES ORIGINAIS (arquivos) por email, dos selecionados ----
+  document.getElementById("btnEnviarComprovantes").addEventListener("click", async () => {
+    const cfg = loadConfig();
+    if(!cfg){ alert("Configuração não encontrada."); return; }
+    if(selecionados.size === 0){
+      alert("Selecione pelo menos um comprovante (checkbox) antes de enviar.");
+      return;
     }
+    const email = prompt("Enviar os comprovantes selecionados pra qual email?");
+    if(!email) return;
+
+    const ids = Array.from(selecionados);
+    await comBotao(document.getElementById("btnEnviarComprovantes"), "Enviando...", async () => {
+      try {
+        const res = await fetch(`${cfg.url}/api/enviar-comprovantes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Senha": cfg.senha || "" },
+          body: JSON.stringify({ ids, email }),
+        });
+        if(res.status === 401){ alert("Senha incorreta."); return; }
+        if(!res.ok){
+          let detalhe = `erro ${res.status}`;
+          try { const corpo = await res.json(); if(corpo?.erro) detalhe = corpo.erro; } catch(e){}
+          alert(`Não deu pra enviar: ${detalhe}`);
+          return;
+        }
+        const data = await res.json();
+        document.getElementById("warnBox").innerHTML = `<div class="info">${data.quantidade} comprovante(s) enviado(s) para ${esc(data.enviadoPara)}.</div>`;
+      } catch(e){
+        alert(`Erro ao enviar comprovantes: ${e.message}`);
+      }
+    });
   });
 
   // =========================================================
