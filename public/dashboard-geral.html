@@ -819,7 +819,12 @@
           body: JSON.stringify({ file: base64, fileName: file.name, mime: file.type }),
         });
         if(res.status === 401){ atualizarStatusFila(elStatus, "Senha incorreta", "erro"); continue; }
-        if(!res.ok){ atualizarStatusFila(elStatus, `Erro ${res.status}`, "erro"); continue; }
+        if(!res.ok){
+          let detalhe = `Erro ${res.status}`;
+          try { const corpo = await res.json(); if(corpo?.erro) detalhe = corpo.erro; } catch(e){}
+          atualizarStatusFila(elStatus, detalhe, "erro");
+          continue;
+        }
 
         const data = await res.json();
         if(data.ok === false){
