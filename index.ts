@@ -190,6 +190,34 @@ function autorizadoDashboard(req: express.Request): boolean {
   return recebido === DASHBOARD_SENHA;
 }
 
+/**
+ * Baixa os arquivos dos comprovantes selecionados (pelos ids), com nomes únicos
+ * e amigáveis (data_beneficiario). Usado tanto pelo ZIP de download quanto pelo
+ * envio por email dos comprovantes originais (não confundir com o "relatório",
+ * que é um PDF/XLSX resumindo os dados — aqui são os arquivos originais).
+ */
+async function baixarAnexosDosComprovantes(
+  ids: string[],
+): Promise<{ filename: string; content: Buffer }[]> {
+  const rows = await comprovantesPorIds(ids);
+  const comArquivo = rows.filter((r) => r.arquivo_url);
+
+  const usados = new Set<string>();
+  const anexos: { filename: string; content: Buffer }[] = [];
+  for (const r of comArquivo) {
+    const buf = await baixarArquivo(r.arquivo_url as string);
+    if (!buf) continue;
+    const ext = (r.arquivo_url as string).split(".").pop() || "jpg";
+    const base = `${r.data}_${(r.beneficiario || "comprovante").replace(/[^\w\-]+/g, "-")}`;
+    let nome = `${base}.${ext}`;
+    let i = 2;
+    while (usados.has(nome)) nome = `${base}-${i++}.${ext}`;
+    usados.add(nome);
+    anexos.push({ filename: nome, content: buf });
+  }
+  return anexos;
+}
+
 // API pro dashboard (v0). Read-only: só devolve dados, não edita nada.
 app.options("/api/comprovantes", (_req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
@@ -215,9 +243,8 @@ app.post("/api/download", async (req, res) => {
     const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
     if (ids.length === 0) return res.status(400).json({ erro: "nenhum comprovante selecionado" });
 
-    const rows = await comprovantesPorIds(ids);
-    const comArquivo = rows.filter((r) => r.arquivo_url);
-    if (comArquivo.length === 0) {
+    const anexos = await baixarAnexosDosComprovantes(ids);
+    if (anexos.length === 0) {
       return res.status(404).json({ erro: "nenhum arquivo disponível para os selecionados" });
     }
 
@@ -231,23 +258,50 @@ app.post("/api/download", async (req, res) => {
     });
     zip.pipe(res);
 
-    const usados = new Set<string>();
-    for (const r of comArquivo) {
-      const buf = await baixarArquivo(r.arquivo_url as string);
-      if (!buf) continue;
-      const ext = (r.arquivo_url as string).split(".").pop() || "jpg";
-      // Nome amigável: data_beneficiario. Evita colisão com sufixo.
-      const base = `${r.data}_${(r.beneficiario || "comprovante").replace(/[^\w\-]+/g, "-")}`;
-      let nome = `${base}.${ext}`;
-      let i = 2;
-      while (usados.has(nome)) nome = `${base}-${i++}.${ext}`;
-      usados.add(nome);
-      zip.append(buf, { name: nome });
-    }
+    for (const a of anexos) zip.append(a.content, { name: a.filename });
 
     await zip.finalize();
   } catch (e) {
     console.error("[download] erro:", e);
+    if (!res.headersSent) res.status(500).json({ erro: String(e) });
+  }
+});
+
+// Envia os ARQUIVOS ORIGINAIS dos comprovantes selecionados por email (anexados
+// direto, um por um) — diferente do "/api/relatorio", que manda um PDF/XLSX
+// resumindo os dados. Aqui é "encaminhar os comprovantes em si".
+app.options("/api/enviar-comprovantes", (_req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type, X-Senha");
+  res.sendStatus(204);
+});
+
+app.post("/api/enviar-comprovantes", async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  if (!autorizadoDashboard(req)) {
+    return res.status(401).json({ erro: "não autorizado" });
+  }
+  try {
+    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const email: string = String(req.body?.email || "").trim();
+    if (ids.length === 0) return res.status(400).json({ erro: "nenhum comprovante selecionado" });
+    if (!email) return res.status(400).json({ erro: "email de destino é obrigatório" });
+
+    const anexos = await baixarAnexosDosComprovantes(ids);
+    if (anexos.length === 0) {
+      return res.status(404).json({ erro: "nenhum arquivo disponível para os selecionados" });
+    }
+
+    await enviarEmailComAnexos(
+      email,
+      "Comprovantes de pagamento",
+      `Segue${anexos.length === 1 ? "" : "m"} em anexo ${anexos.length} comprovante${anexos.length === 1 ? "" : "s"}.`,
+      anexos,
+    );
+    res.json({ ok: true, enviadoPara: email, quantidade: anexos.length });
+  } catch (e) {
+    console.error("[enviar-comprovantes] erro:", e);
     if (!res.headersSent) res.status(500).json({ erro: String(e) });
   }
 });
