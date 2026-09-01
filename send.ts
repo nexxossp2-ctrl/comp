@@ -1,16 +1,20 @@
 import nodemailer from "nodemailer";
 
+// .trim() em tudo: variável de ambiente colada com espaço/quebra de linha a
+// mais no final é uma causa clássica de "queryA EBADNAME" na hora de mandar email.
+const env = (nome: string): string => (process.env[nome] || "").trim();
+
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: process.env.SMTP_PORT === "465",
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  host: env("SMTP_HOST"),
+  port: Number(env("SMTP_PORT")) || 587,
+  secure: env("SMTP_PORT") === "465",
+  auth: { user: env("SMTP_USER"), pass: env("SMTP_PASS") },
 });
 
 export async function enviarEmail(assunto: string, texto: string): Promise<void> {
   await transporter.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
-    to: process.env.REPORT_EMAIL_TO,
+    from: env("SMTP_FROM") || env("SMTP_USER"),
+    to: env("REPORT_EMAIL_TO"),
     subject: assunto,
     text: texto,
   });
@@ -24,8 +28,8 @@ export async function enviarEmailComAnexos(
   anexos: { filename: string; content: Buffer }[],
 ): Promise<void> {
   await transporter.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
-    to: para,
+    from: env("SMTP_FROM") || env("SMTP_USER"),
+    to: para.trim(),
     subject: assunto,
     text: texto,
     attachments: anexos,

@@ -29,8 +29,7 @@ export function gerarPDF(itens: ItemRelatorio[]): Promise<Buffer> {
     const y0 = doc.y;
     doc.fillColor("#000").fontSize(10);
     doc.text("Data", 40, y0, { width: 80 });
-    doc.text("Beneficiário", 120, y0, { width: 220 });
-    doc.text("Quem enviou", 340, y0, { width: 120 });
+    doc.text("Beneficiário", 120, y0, { width: 340 });
     doc.text("Valor", 460, y0, { width: 90, align: "right" });
     doc.moveTo(40, doc.y + 2).lineTo(555, doc.y + 2).stroke("#ccc");
     doc.moveDown(0.5);
@@ -40,12 +39,9 @@ export function gerarPDF(itens: ItemRelatorio[]): Promise<Buffer> {
       doc.fillColor("#000").fontSize(9);
 
       const benef = i.beneficiario || "-";
-      const remet = i.remetente || "-";
 
-      // Mede a altura que cada coluna de texto vai ocupar (nomes longos quebram linha).
-      const hBenef = doc.heightOfString(benef, { width: 220 });
-      const hRemet = doc.heightOfString(remet, { width: 120 });
-      const hLinha = Math.max(hBenef, hRemet, 12);
+      // Mede a altura que a coluna de texto vai ocupar (nomes longos quebram linha).
+      const hLinha = Math.max(doc.heightOfString(benef, { width: 340 }), 12);
 
       // Quebra de página se não couber
       if (y + hLinha > 790) {
@@ -54,8 +50,7 @@ export function gerarPDF(itens: ItemRelatorio[]): Promise<Buffer> {
       const yy = doc.y;
 
       doc.text(dataBR(i.data), 40, yy, { width: 80 });
-      doc.text(benef, 120, yy, { width: 220 });
-      doc.text(remet, 340, yy, { width: 120 });
+      doc.text(benef, 120, yy, { width: 340 });
       doc.text(i.valor != null ? brl(Number(i.valor)) : "-", 460, yy, { width: 90, align: "right" });
 
       // Avança o cursor pela altura real da linha + respiro
@@ -82,8 +77,7 @@ export async function gerarXLSX(itens: ItemRelatorio[]): Promise<Buffer> {
 
   ws.columns = [
     { header: "Data", key: "data", width: 14 },
-    { header: "Beneficiário", key: "beneficiario", width: 36 },
-    { header: "Quem enviou", key: "remetente", width: 24 },
+    { header: "Beneficiário", key: "beneficiario", width: 40 },
     { header: "Valor", key: "valor", width: 16 },
   ];
   ws.getRow(1).font = { bold: true };
@@ -92,7 +86,6 @@ export async function gerarXLSX(itens: ItemRelatorio[]): Promise<Buffer> {
     ws.addRow({
       data: dataBR(i.data),
       beneficiario: i.beneficiario || "",
-      remetente: i.remetente || "",
       valor: i.valor != null ? Number(i.valor) : null,
     });
   }
@@ -101,7 +94,7 @@ export async function gerarXLSX(itens: ItemRelatorio[]): Promise<Buffer> {
   ws.getColumn("valor").numFmt = 'R$ #,##0.00';
 
   const total = itens.reduce((s, i) => s + (Number(i.valor) || 0), 0);
-  const totalRow = ws.addRow({ remetente: "Total", valor: total });
+  const totalRow = ws.addRow({ beneficiario: "Total", valor: total });
   totalRow.font = { bold: true };
 
   const buf = await wb.xlsx.writeBuffer();
