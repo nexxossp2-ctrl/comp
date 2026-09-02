@@ -103,6 +103,9 @@
   .divisao-avisos{margin:10px 0}
   .divisao-avisos .warn{margin-bottom:6px}
   .fechar-x{border:none;background:none;color:var(--muted);cursor:pointer;font-size:13px;text-decoration:underline;padding:0}
+  .btn-cancelar-boleto{border:1px solid var(--line);background:var(--card);border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer;color:#a33;white-space:nowrap}
+  .btn-cancelar-boleto:hover{background:#fbe3e3;border-color:#f0c8a8}
+  .btn-cancelar-boleto:disabled{opacity:.5;cursor:default}
 
   [hidden]{display:none!important}
 </style>
@@ -142,9 +145,10 @@
       <div class="field">
         <label for="nfsStatus">Status</label>
         <select id="nfsStatus">
-          <option value="">Todas</option>
-          <option value="pendente" selected>Não utilizadas</option>
-          <option value="dividida">Utilizadas</option>
+          <option value="" selected>Todas</option>
+          <option value="nao_utilizada">Não utilizadas</option>
+          <option value="parcial">Parciais (com saldo)</option>
+          <option value="utilizada">Utilizadas</option>
         </select>
       </div>
       <button class="btn" id="btnAtualizarNfs">Atualizar</button>
@@ -154,7 +158,7 @@
 
     <div class="lista-head"><h2>NFs de venda</h2></div>
     <table>
-      <thead><tr><th>Data</th><th>Nº NF</th><th>CNPJ</th><th>Cliente</th><th>Valor</th><th>Status</th></tr></thead>
+      <thead><tr><th>Data</th><th>Nº NF</th><th>CNPJ</th><th>Cliente</th><th>Emitido</th><th>Liquidado</th><th>Disponível</th><th>Status</th></tr></thead>
       <tbody id="tbodyNfs"></tbody>
     </table>
     <div class="empty" id="emptyNfs" hidden>Nenhuma NF encontrada com esse filtro.</div>
@@ -170,6 +174,7 @@
           <option value="aberto" selected>Em aberto</option>
           <option value="pago">Pagos</option>
           <option value="nao_conciliado">Não conciliados</option>
+          <option value="cancelado">Cancelados</option>
         </select>
       </div>
       <button class="btn" id="btnAtualizarBoletos">Atualizar</button>
@@ -183,7 +188,7 @@
 
     <div class="lista-head"><h2>Boletos</h2></div>
     <table>
-      <thead><tr><th>Nº NF</th><th>Cliente</th><th>Seu número</th><th>Banco</th><th>Valor</th><th>Status</th><th>Pago em</th></tr></thead>
+      <thead><tr><th>Nº NF</th><th>Cliente</th><th>Seu número</th><th>Banco</th><th>Valor</th><th>Status</th><th>Pago em</th><th></th></tr></thead>
       <tbody id="tbodyBoletos"></tbody>
     </table>
     <div class="empty" id="emptyBoletos" hidden>Nenhum boleto encontrado com esse filtro.</div>
@@ -321,31 +326,48 @@
     } catch(e){ mostrarAviso(`Erro ao carregar NFs: ${e.message}`); }
   }
 
+  let nfsCache = [];
+
+  const BADGE_SITUACAO_NF = { nao_utilizada: "badge", parcial: "badge nf", utilizada: "badge ok" };
+  const TXT_SITUACAO_NF = { nao_utilizada: "Não utilizada", parcial: "Parcial", utilizada: "Utilizada" };
+
   function renderNfs(nfs){
+    nfsCache = nfs;
     tbodyNfs.innerHTML = "";
     emptyNfs.hidden = nfs.length > 0;
     for(const nf of nfs){
       const tr = document.createElement("tr");
       tr.className = "linha-dado";
-      const statusBadge = nf.status === "dividida" ? `<span class="badge ok">Utilizada</span>` : `<span class="badge">Não utilizada</span>`;
+      const cls = BADGE_SITUACAO_NF[nf.situacao] || "badge";
+      const txt = TXT_SITUACAO_NF[nf.situacao] || nf.situacao;
       tr.innerHTML = `
         <td class="data">${brDate(nf.data)}</td>
         <td>${esc(nf.numero_nf)}</td>
         <td>${esc(nf.cnpj || "-")}</td>
         <td>${esc(nf.cliente || "-")}</td>
-        <td class="valor">${nf.valor != null ? brl(nf.valor) : "-"}</td>
-        <td>${statusBadge}</td>
+        <td class="valor">${brl(nf.emitido)}</td>
+        <td class="valor">${brl(nf.liquidado)}</td>
+        <td class="valor">${brl(nf.disponivel)}</td>
+        <td><span class="${cls}">${txt}</span></td>
       `;
       tr.addEventListener("click", () => abrirNf(nf));
       tbodyNfs.appendChild(tr);
     }
   }
 
+  /** Depois de qualquer ação que mude saldo (dividir, cancelar boleto), recarrega
+   * a lista e reabre o painel da mesma NF já com os números atualizados. */
+  async function recarregarEReabrirNf(nfId){
+    await carregarNfs();
+    const atualizada = nfsCache.find((n) => n.id === nfId);
+    if(atualizada) abrirNf(atualizada);
+  }
+
   function tabelaBoletosHtml(boletos){
     if(!boletos.length) return "";
     return `
       <table style="margin-top:14px">
-        <thead><tr><th>Seu número</th><th>Banco</th><th>Valor</th><th>Status</th><th>Pago em</th></tr></thead>
+        <thead><tr><th>Seu número</th><th>Banco</th><th>Valor</th><th>Status</th><th>Pago em</th><th></th></tr></thead>
         <tbody>
           ${boletos.map((b) => `
             <tr>
@@ -354,6 +376,7 @@
               <td class="valor">${brl(b.valor)}</td>
               <td><span class="${BADGE_STATUS_BOLETO[b.status] || 'badge'}">${TXT_STATUS_BOLETO[b.status] || b.status}</span></td>
               <td class="data">${b.data_pagamento ? brDate(b.data_pagamento) : "-"}</td>
+              <td>${b.status === "aberto" ? `<button class="btn-cancelar-boleto" data-id="${b.id}">Cancelar</button>` : ""}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -361,9 +384,23 @@
     `;
   }
 
+  /** Liga o clique dos botões "Cancelar" recém-inseridos no HTML da NF aberta. */
+  function ligarBotoesCancelar(nfId){
+    Array.from(divisaoBoxWrap.querySelectorAll(".btn-cancelar-boleto")).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if(!confirm("Cancelar este boleto? O valor volta pro saldo disponível da NF.")) return;
+        btn.disabled = true;
+        try {
+          await apiJson(`/api/vendas/boletos/${btn.dataset.id}/cancelar`, { method: "POST" });
+          recarregarEReabrirNf(nfId);
+        } catch(e){ alert(`Erro ao cancelar: ${e.message}`); btn.disabled = false; }
+      });
+    });
+  }
+
   // Clicar numa NF sempre mostra embaixo os boletos daquela nota (igual a aba
-  // Boletos, só que filtrado). Se a NF ainda não foi utilizada (dividida em
-  // boletos), mostra também o formulário de divisão.
+  // Boletos, só que filtrado). Se ainda tiver saldo disponível, mostra também
+  // o formulário pra dividir o que resta — mesmo que a NF já tenha boleto(s).
   async function abrirNf(nf){
     divisaoBoxWrap.innerHTML = `<div class="divisao-box"><p class="sub" style="margin:0">Carregando...</p></div>`;
 
@@ -377,27 +414,30 @@
     }
 
     const boletosHtml = tabelaBoletosHtml(boletos);
+    const resumoSaldo = `Emitido: ${brl(nf.emitido)} · Liquidado: ${brl(nf.liquidado)} · Disponível: ${brl(nf.disponivel)}`;
 
-    if(nf.status === "dividida"){
+    if(nf.disponivel <= 0){
       divisaoBoxWrap.innerHTML = `
         <div class="divisao-box">
           <h3>NF ${esc(nf.numero_nf)} — boletos</h3>
-          <p class="sub">Cliente: ${esc(nf.cliente || "-")} · Valor da NF: ${nf.valor != null ? brl(nf.valor) : "-"}</p>
+          <p class="sub">Cliente: ${esc(nf.cliente || "-")} · ${resumoSaldo}</p>
           ${boletosHtml || `<p class="sub" style="margin:0">Nenhum boleto encontrado pra essa NF.</p>`}
+          <p class="sub" style="margin-top:10px">Sem saldo disponível pra novos boletos. Cancele algum boleto em aberto acima pra liberar espaço.</p>
           <div style="margin-top:14px"><button class="fechar-x" id="btnFecharDivisao">Fechar</button></div>
         </div>
       `;
       document.getElementById("btnFecharDivisao").addEventListener("click", () => { divisaoBoxWrap.innerHTML = ""; });
+      ligarBotoesCancelar(nf.id);
       return;
     }
 
     divisaoBoxWrap.innerHTML = `
       <div class="divisao-box">
         <h3>Dividir NF ${esc(nf.numero_nf)} em boletos</h3>
-        <p class="sub">Cliente: ${esc(nf.cliente || "-")} · Valor da NF: ${nf.valor != null ? brl(nf.valor) : "-"}</p>
+        <p class="sub">Cliente: ${esc(nf.cliente || "-")} · ${resumoSaldo}</p>
         ${boletosHtml}
         <div class="field" style="margin-top:14px">
-          <label>Descreva a divisão</label>
+          <label>Descreva a divisão (até ${brl(nf.disponivel)} disponível)</label>
           <textarea id="divisaoTexto" rows="2" placeholder='ex: 2 boletos banco itau valores 100,00 e 45,00'></textarea>
         </div>
         <div style="margin-top:10px"><button class="btn secondary small" id="btnAnalisarDivisao">Analisar</button></div>
@@ -407,6 +447,7 @@
     `;
     document.getElementById("btnFecharDivisao").addEventListener("click", () => { divisaoBoxWrap.innerHTML = ""; });
     document.getElementById("btnAnalisarDivisao").addEventListener("click", () => analisarDivisao(nf));
+    ligarBotoesCancelar(nf.id);
   }
 
   async function analisarDivisao(nf){
@@ -460,6 +501,11 @@
     const banco = document.getElementById("divisaoBanco").value.trim() || null;
     const valores = Array.from(document.querySelectorAll(".divisao-valor-input")).map((el) => Number(el.value)).filter((v) => Number.isFinite(v) && v > 0);
     if(valores.length === 0){ alert("Informe ao menos um valor válido."); return; }
+    const soma = valores.reduce((s, v) => s + v, 0);
+    if(soma > nf.disponivel + 0.01){
+      alert(`A soma dos boletos (${brl(soma)}) é maior que o saldo disponível da NF (${brl(nf.disponivel)}).`);
+      return;
+    }
     const itens = valores.map((valor) => ({ banco, valor }));
 
     const btn = document.getElementById("btnConfirmarDivisao");
@@ -471,10 +517,12 @@
           <p class="info" style="margin:0 0 12px">Divisão salva: ${itens.length} boleto(s). Relatório de solicitação #${resultado.relatorioId}.</p>
           <button class="btn secondary small" id="btnBaixarRelPdf">Baixar relatório (PDF)</button>
           <button class="btn secondary small" id="btnBaixarRelXlsx">Baixar relatório (XLSX)</button>
+          <div style="margin-top:14px"><button class="fechar-x" id="btnFecharSucesso">Fechar</button></div>
         </div>
       `;
       document.getElementById("btnBaixarRelPdf").addEventListener("click", () => baixarRelatorio(resultado.relatorioId, "pdf"));
       document.getElementById("btnBaixarRelXlsx").addEventListener("click", () => baixarRelatorio(resultado.relatorioId, "xlsx"));
+      document.getElementById("btnFecharSucesso").addEventListener("click", () => { divisaoBoxWrap.innerHTML = ""; });
       carregarNfs();
     } catch(e){
       alert(`Erro ao confirmar divisão: ${e.message}`);
@@ -500,8 +548,8 @@
   document.getElementById("btnAtualizarBoletos").addEventListener("click", carregarBoletos);
   document.getElementById("boletosStatus").addEventListener("change", carregarBoletos);
 
-  const BADGE_STATUS_BOLETO = { aberto: "badge", pago: "badge ok", nao_conciliado: "badge" };
-  const TXT_STATUS_BOLETO = { aberto: "Em aberto", pago: "Pago", nao_conciliado: "Não conciliado" };
+  const BADGE_STATUS_BOLETO = { aberto: "badge", pago: "badge ok", nao_conciliado: "badge", cancelado: "badge" };
+  const TXT_STATUS_BOLETO = { aberto: "Em aberto", pago: "Pago", nao_conciliado: "Não conciliado", cancelado: "Cancelado" };
 
   async function carregarBoletos(){
     try {
@@ -528,9 +576,20 @@
         <td class="valor">${brl(b.valor)}</td>
         <td><span class="${cls}">${TXT_STATUS_BOLETO[b.status] || b.status}</span></td>
         <td class="data">${b.data_pagamento ? brDate(b.data_pagamento) : "-"}</td>
+        <td>${b.status === "aberto" ? `<button class="btn-cancelar-boleto" data-id="${b.id}">Cancelar</button>` : ""}</td>
       `;
       tbodyBoletos.appendChild(tr);
     }
+    Array.from(tbodyBoletos.querySelectorAll(".btn-cancelar-boleto")).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if(!confirm("Cancelar este boleto? O valor volta pro saldo disponível da NF.")) return;
+        btn.disabled = true;
+        try {
+          await apiJson(`/api/vendas/boletos/${btn.dataset.id}/cancelar`, { method: "POST" });
+          carregarBoletos();
+        } catch(e){ alert(`Erro ao cancelar: ${e.message}`); btn.disabled = false; }
+      });
+    });
     document.getElementById("boletosTotal").textContent = brl(total);
     document.getElementById("boletosQtd").textContent = `${qtd} boleto${qtd === 1 ? "" : "s"} em aberto`;
   }
