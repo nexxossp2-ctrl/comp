@@ -275,6 +275,7 @@
       <div class="label">Total em aberto no filtro</div>
       <div class="value" id="solTotal">R$ 0,00</div>
       <div class="count" id="solQtd">0 solicitações</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">CT-e não entra nessa soma (frete já incluso no boleto)</div>
     </div>
 
     <div class="lista-head">
@@ -737,8 +738,9 @@
   const selecionadosSol = new Set();
 
   function badgeTipoHtml(docTipo){
-    const nf = docTipo === "nf";
-    return `<span class="badge${nf ? " nf" : ""}">${nf ? "NF" : "Boleto"}</span>`;
+    if(docTipo === "nf") return `<span class="badge nf">NF</span>`;
+    if(docTipo === "cte") return `<span class="badge nf" title="Frete de uma NF já cobrada num boleto — não entra na soma do total">CT-e</span>`;
+    return `<span class="badge">Boleto</span>`;
   }
 
   function linhaSolicitadoHtml(item){
@@ -948,7 +950,7 @@
         } else {
           // Mostra o que o sistema entendeu (tipo + valor + beneficiário) pra dar pra
           // conferir na hora se a classificação saiu certa, sem precisar abrir a aba depois.
-          const tipoTxt = { pago: "Comprovante", boleto: "Boleto", nf: "NF" }[data.tipo] || "";
+          const tipoTxt = { pago: "Comprovante", boleto: "Boleto", nf: "NF", cte: "CT-e" }[data.tipo] || "";
           const valorTxt = data.valor != null ? brl(data.valor) : "";
           const benefTxt = data.beneficiario ? ` · ${data.beneficiario}` : "";
           atualizarStatusFila(elStatus, `OK · ${tipoTxt} ${valorTxt}${benefTxt}`.replace(/\s+/g, " ").trim(), "ok");
