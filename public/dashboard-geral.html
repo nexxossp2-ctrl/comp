@@ -269,9 +269,20 @@
       <div class="count" id="solQtd">0 solicitações</div>
     </div>
 
-    <div class="lista-head"><h2>Solicitações em aberto</h2></div>
+    <div class="lista-head">
+      <h2>Solicitações em aberto</h2>
+      <div class="lista-acoes">
+        <span id="solSelecionados" style="font-size:13px;color:var(--muted)"></span>
+        <button class="btn secondary small" id="btnEnviarSolicitacoes">Enviar comprovantes selecionados por email</button>
+      </div>
+    </div>
     <table>
-      <thead><tr><th>Data</th><th>Beneficiário</th><th>Quem enviou</th><th>Valor</th><th></th></tr></thead>
+      <thead>
+        <tr>
+          <th class="check"><input type="checkbox" id="checkTodosSol" /></th>
+          <th>Data</th><th>Beneficiário</th><th>Quem enviou</th><th>Valor</th><th></th>
+        </tr>
+      </thead>
       <tbody id="tbodySolicitado"></tbody>
     </table>
     <div class="empty" id="emptySolicitado" hidden>Nenhuma solicitação em aberto no período.</div>
@@ -715,14 +726,22 @@
   // =========================================================
   // ABA SOLICITADO
   // =========================================================
+  const selecionadosSol = new Set();
+
   function linhaSolicitadoHtml(item){
-    return `<tr>
+    return `<tr class="linha-dado" data-id="${esc(item.identificador)}">
+      <td class="check"><input type="checkbox" class="chk-item" data-id="${esc(item.identificador)}" ${selecionadosSol.has(item.identificador) ? "checked" : ""} /></td>
       <td class="data">${brDate(item.data)}</td>
       <td>${esc(item.beneficiario) || "-"}</td>
       <td>${esc(item.remetente) || "-"}</td>
       <td class="valor">${item.valor != null ? brl(item.valor) : "-"}</td>
       <td><button class="btn-excluir" data-id="${esc(item.identificador)}">Excluir</button></td>
     </tr>`;
+  }
+
+  function atualizarContagemSelecionadosSol(){
+    const span = document.getElementById("solSelecionados");
+    span.textContent = selecionadosSol.size ? `${selecionadosSol.size} selecionado(s)` : "";
   }
 
   async function carregarSolicitado(){
@@ -755,16 +774,85 @@
   function renderizarSolicitado(itens, total, quantidade){
     document.getElementById("solTotal").textContent = brl(total);
     document.getElementById("solQtd").textContent = quantidade + (quantidade === 1 ? " solicitação" : " solicitações");
+
+    // mantém só as seleções que ainda existem na lista atual
+    const idsAtuais = new Set(itens.map((i) => i.identificador));
+    Array.from(selecionadosSol).forEach((id) => { if(!idsAtuais.has(id)) selecionadosSol.delete(id); });
+    atualizarContagemSelecionadosSol();
+
     const tbody = document.getElementById("tbodySolicitado");
     tbody.innerHTML = itens.map(linhaSolicitadoHtml).join("");
     document.getElementById("emptySolicitado").hidden = itens.length !== 0;
+    document.getElementById("checkTodosSol").checked = itens.length > 0 && itens.every((i) => selecionadosSol.has(i.identificador));
+
+    tbody.dataset.arquivos = JSON.stringify(Object.fromEntries(itens.map((i) => [i.identificador, i.arquivo])));
   }
 
   document.getElementById("btnAtualizarSol").addEventListener("click", carregarSolicitado);
+
+  document.getElementById("checkTodosSol").addEventListener("change", (ev) => {
+    const marcado = ev.target.checked;
+    document.querySelectorAll("#tbodySolicitado .chk-item").forEach((chk) => {
+      chk.checked = marcado;
+      if(marcado) selecionadosSol.add(chk.dataset.id); else selecionadosSol.delete(chk.dataset.id);
+    });
+    atualizarContagemSelecionadosSol();
+  });
+
+  // Clique na linha abre o comprovante (reaproveita o mesmo pop-up da aba Comprovantes);
+  // clique no checkbox ou no botão excluir não.
   document.getElementById("tbodySolicitado").addEventListener("click", (ev) => {
-    const btn = ev.target.closest(".btn-excluir");
-    if(!btn) return;
-    excluirItem(btn.dataset.id, btn, carregarSolicitado);
+    const btnEx = ev.target.closest(".btn-excluir");
+    if(btnEx){
+      excluirItem(btnEx.dataset.id, btnEx, carregarSolicitado);
+      return;
+    }
+    const chk = ev.target.closest(".chk-item");
+    if(chk){
+      if(chk.checked) selecionadosSol.add(chk.dataset.id); else selecionadosSol.delete(chk.dataset.id);
+      atualizarContagemSelecionadosSol();
+      return;
+    }
+    const linha = ev.target.closest("tr.linha-dado");
+    if(!linha) return;
+    const arquivos = JSON.parse(document.getElementById("tbodySolicitado").dataset.arquivos || "{}");
+    const url = arquivos[linha.dataset.id];
+    if(url) abrirVisualizador(url);
+    else alert("Essa solicitação não tem arquivo anexado.");
+  });
+
+  // ---- Enviar as SOLICITAÇÕES (boleto / pagamento de NF) selecionadas por email ----
+  document.getElementById("btnEnviarSolicitacoes").addEventListener("click", async () => {
+    const cfg = loadConfig();
+    if(!cfg){ alert("Configuração não encontrada."); return; }
+    if(selecionadosSol.size === 0){
+      alert("Selecione pelo menos uma solicitação (checkbox) antes de enviar.");
+      return;
+    }
+    const email = prompt("Enviar as solicitações selecionadas pra qual email?");
+    if(!email) return;
+
+    const ids = Array.from(selecionadosSol);
+    await comBotao(document.getElementById("btnEnviarSolicitacoes"), "Enviando...", async () => {
+      try {
+        const res = await fetch(`${cfg.url}/api/enviar-comprovantes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Senha": cfg.senha || "" },
+          body: JSON.stringify({ ids, email }),
+        });
+        if(res.status === 401){ alert("Senha incorreta."); return; }
+        if(!res.ok){
+          let detalhe = `erro ${res.status}`;
+          try { const corpo = await res.json(); if(corpo?.erro) detalhe = corpo.erro; } catch(e){}
+          alert(`Não deu pra enviar: ${detalhe}`);
+          return;
+        }
+        const data = await res.json();
+        document.getElementById("warnBox").innerHTML = `<div class="info">${data.quantidade} solicitação(ões) enviada(s) para ${esc(data.enviadoPara)}.</div>`;
+      } catch(e){
+        alert(`Erro ao enviar solicitações: ${e.message}`);
+      }
+    });
   });
 
   // =========================================================
