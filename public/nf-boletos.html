@@ -188,7 +188,7 @@
 
     <div class="lista-head"><h2>Boletos</h2></div>
     <table>
-      <thead><tr><th>Nº NF</th><th>Cliente</th><th>Seu número</th><th>Banco</th><th>Valor</th><th>Status</th><th>Pago em</th><th></th></tr></thead>
+      <thead><tr><th>Nº NF</th><th>Cliente</th><th>Seu número</th><th>Banco</th><th>Valor</th><th>Status</th><th>Data solicitação</th><th>Pago em</th><th></th></tr></thead>
       <tbody id="tbodyBoletos"></tbody>
     </table>
     <div class="empty" id="emptyBoletos" hidden>Nenhum boleto encontrado com esse filtro.</div>
@@ -238,6 +238,14 @@
   const LS_KEY = "dashboardConfig"; // mesma config do dashboard de Comprovantes
   const brl = (n) => (Number(n)||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
   const brDate = (iso) => { if(!iso) return "-"; const [y,m,d]=iso.split("-"); return d+"/"+m+"/"+y; };
+  // created_at vem como timestamptz (UTC) — converte pro fuso de SP antes de
+  // pegar só a data, senão um boleto criado tarde da noite podia mostrar o
+  // dia seguinte.
+  const brDataHora = (isoCompleto) => {
+    if(!isoCompleto) return "-";
+    try { return new Date(isoCompleto).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }); }
+    catch(e){ return "-"; }
+  };
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 
   function loadConfig(){ try { return JSON.parse(localStorage.getItem(LS_KEY) || "null"); } catch(e){ return null; } }
@@ -367,7 +375,7 @@
     if(!boletos.length) return "";
     return `
       <table style="margin-top:14px">
-        <thead><tr><th>Seu número</th><th>Banco</th><th>Valor</th><th>Status</th><th>Pago em</th><th></th></tr></thead>
+        <thead><tr><th>Seu número</th><th>Banco</th><th>Valor</th><th>Status</th><th>Data solicitação</th><th>Pago em</th><th></th></tr></thead>
         <tbody>
           ${boletos.map((b) => `
             <tr>
@@ -375,6 +383,7 @@
               <td>${esc(b.banco || "-")}</td>
               <td class="valor">${brl(b.valor)}</td>
               <td><span class="${BADGE_STATUS_BOLETO[b.status] || 'badge'}">${TXT_STATUS_BOLETO[b.status] || b.status}</span></td>
+              <td class="data">${brDataHora(b.created_at)}</td>
               <td class="data">${b.data_pagamento ? brDate(b.data_pagamento) : "-"}</td>
               <td>${b.status === "aberto" ? `<button class="btn-cancelar-boleto" data-id="${b.id}">Cancelar</button>` : ""}</td>
             </tr>
@@ -575,6 +584,7 @@
         <td>${esc(b.banco || "-")}</td>
         <td class="valor">${brl(b.valor)}</td>
         <td><span class="${cls}">${TXT_STATUS_BOLETO[b.status] || b.status}</span></td>
+        <td class="data">${brDataHora(b.created_at)}</td>
         <td class="data">${b.data_pagamento ? brDate(b.data_pagamento) : "-"}</td>
         <td>${b.status === "aberto" ? `<button class="btn-cancelar-boleto" data-id="${b.id}">Cancelar</button>` : ""}</td>
       `;
