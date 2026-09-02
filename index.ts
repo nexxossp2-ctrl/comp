@@ -700,6 +700,21 @@ app.get("/api/vendas/nfs", async (req, res) => {
   }
 });
 
+// Boletos de uma NF específica — usado pra mostrar embaixo da linha na aba "NFs de venda".
+app.get("/api/vendas/nfs/:id/boletos", async (req, res) => {
+  corsVendas(res, "GET");
+  if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
+  try {
+    const nfId = Number(req.params.id);
+    if (!nfId) return res.status(400).json({ erro: "id inválido" });
+    const boletos = await listarBoletosPorNf(nfId);
+    res.json({ boletos });
+  } catch (e) {
+    console.error("[vendas/nfs/boletos] erro:", e);
+    res.status(500).json({ erro: String(e) });
+  }
+});
+
 // Upload manual do XML da NF de venda (equivalente ao /api/upload dos comprovantes).
 app.post("/api/vendas/upload", async (req, res) => {
   corsVendas(res, "POST");
