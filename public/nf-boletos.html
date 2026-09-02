@@ -106,6 +106,8 @@
   .btn-cancelar-boleto{border:1px solid var(--line);background:var(--card);border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer;color:#a33;white-space:nowrap}
   .btn-cancelar-boleto:hover{background:#fbe3e3;border-color:#f0c8a8}
   .btn-cancelar-boleto:disabled{opacity:.5;cursor:default}
+  .lista-acoes select{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--ink);font-family:inherit}
+  th.col-check,td.col-check{width:34px;padding-left:14px;padding-right:0}
 
   [hidden]{display:none!important}
 </style>
@@ -177,6 +179,15 @@
           <option value="cancelado">Cancelados</option>
         </select>
       </div>
+      <div class="field">
+        <label for="boletosInicio">De</label>
+        <input type="date" id="boletosInicio" />
+      </div>
+      <div class="field">
+        <label for="boletosFim">Até</label>
+        <input type="date" id="boletosFim" />
+      </div>
+      <button class="btn secondary" id="btnHojeBoletos">Hoje</button>
       <button class="btn" id="btnAtualizarBoletos">Atualizar</button>
     </div>
 
@@ -186,9 +197,19 @@
       <div class="count" id="boletosQtd">0 boletos</div>
     </div>
 
-    <div class="lista-head"><h2>Boletos</h2></div>
+    <div class="lista-head">
+      <h2>Boletos</h2>
+      <div class="lista-acoes">
+        <span class="sub" id="boletosSelecionadosTxt" style="margin:0">0 selecionado(s)</span>
+        <select id="boletosRelFormato">
+          <option value="pdf">PDF</option>
+          <option value="xlsx">XLSX</option>
+        </select>
+        <button class="btn secondary small" id="btnGerarRelSelecionados" disabled>Gerar relatório dos selecionados</button>
+      </div>
+    </div>
     <table>
-      <thead><tr><th>Nº NF</th><th>Cliente</th><th>Seu número</th><th>Banco</th><th>Valor</th><th>Status</th><th>Data solicitação</th><th>Pago em</th><th></th></tr></thead>
+      <thead><tr><th class="col-check"><input type="checkbox" id="checkAllBoletos" /></th><th>Nº NF</th><th>Cliente</th><th>Seu número</th><th>Banco</th><th>Valor</th><th>Status</th><th>Data solicitação</th><th>Pago em</th><th></th></tr></thead>
       <tbody id="tbodyBoletos"></tbody>
     </table>
     <div class="empty" id="emptyBoletos" hidden>Nenhum boleto encontrado com esse filtro.</div>
@@ -245,6 +266,11 @@
     if(!isoCompleto) return "-";
     try { return new Date(isoCompleto).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }); }
     catch(e){ return "-"; }
+  };
+  // Data de hoje no fuso de SP, já no formato YYYY-MM-DD (pros <input type="date">).
+  const hojeISO = () => {
+    try { return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); }
+    catch(e){ return new Date().toISOString().slice(0, 10); }
   };
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 
@@ -556,20 +582,47 @@
   const emptyBoletos = document.getElementById("emptyBoletos");
   document.getElementById("btnAtualizarBoletos").addEventListener("click", carregarBoletos);
   document.getElementById("boletosStatus").addEventListener("change", carregarBoletos);
+  document.getElementById("btnHojeBoletos").addEventListener("click", () => {
+    document.getElementById("boletosInicio").value = hojeISO();
+    document.getElementById("boletosFim").value = hojeISO();
+    carregarBoletos();
+  });
 
   const BADGE_STATUS_BOLETO = { aberto: "badge", pago: "badge ok", nao_conciliado: "badge", cancelado: "badge" };
   const TXT_STATUS_BOLETO = { aberto: "Em aberto", pago: "Pago", nao_conciliado: "Não conciliado", cancelado: "Cancelado" };
 
+  // Ids marcados pra entrar num relatório consolidado (pode ter boleto de várias
+  // NFs/divisões diferentes) — igual limpo sempre que a lista é recarregada,
+  // pra não arrastar seleção de um filtro pra outro.
+  const boletosSelecionados = new Set();
+
   async function carregarBoletos(){
     try {
       const status = document.getElementById("boletosStatus").value;
-      const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+      const inicio = document.getElementById("boletosInicio").value;
+      const fim = document.getElementById("boletosFim").value;
+      const params = new URLSearchParams();
+      if(status) params.set("status", status);
+      if(inicio) params.set("inicio", inicio);
+      if(fim) params.set("fim", fim);
+      const qs = params.toString() ? `?${params.toString()}` : "";
       const { boletos } = await apiJson(`/api/vendas/boletos${qs}`);
       renderBoletos(boletos);
     } catch(e){ mostrarAviso(`Erro ao carregar boletos: ${e.message}`); }
   }
 
+  function atualizarResumoSelecao(){
+    const qtd = boletosSelecionados.size;
+    document.getElementById("boletosSelecionadosTxt").textContent = `${qtd} selecionado${qtd === 1 ? "" : "s"}`;
+    document.getElementById("btnGerarRelSelecionados").disabled = qtd === 0;
+    const total = tbodyBoletos.querySelectorAll(".check-boleto").length;
+    const marcados = tbodyBoletos.querySelectorAll(".check-boleto:checked").length;
+    document.getElementById("checkAllBoletos").checked = total > 0 && marcados === total;
+  }
+
   function renderBoletos(boletos){
+    boletosSelecionados.clear();
+    document.getElementById("checkAllBoletos").checked = false;
     tbodyBoletos.innerHTML = "";
     emptyBoletos.hidden = boletos.length > 0;
     let total = 0, qtd = 0;
@@ -578,6 +631,7 @@
       const tr = document.createElement("tr");
       const cls = BADGE_STATUS_BOLETO[b.status] || "badge";
       tr.innerHTML = `
+        <td class="col-check"><input type="checkbox" class="check-boleto" data-id="${b.id}" /></td>
         <td>${esc(b.nf?.numero_nf || "-")}</td>
         <td>${esc(b.nf?.cliente || "-")}</td>
         <td>${esc(b.seu_numero)}</td>
@@ -600,9 +654,50 @@
         } catch(e){ alert(`Erro ao cancelar: ${e.message}`); btn.disabled = false; }
       });
     });
+    Array.from(tbodyBoletos.querySelectorAll(".check-boleto")).forEach((chk) => {
+      chk.addEventListener("change", () => {
+        const id = Number(chk.dataset.id);
+        if(chk.checked) boletosSelecionados.add(id); else boletosSelecionados.delete(id);
+        atualizarResumoSelecao();
+      });
+    });
     document.getElementById("boletosTotal").textContent = brl(total);
     document.getElementById("boletosQtd").textContent = `${qtd} boleto${qtd === 1 ? "" : "s"} em aberto`;
+    atualizarResumoSelecao();
   }
+
+  document.getElementById("checkAllBoletos").addEventListener("change", (e) => {
+    const marcar = e.target.checked;
+    Array.from(tbodyBoletos.querySelectorAll(".check-boleto")).forEach((chk) => {
+      chk.checked = marcar;
+      const id = Number(chk.dataset.id);
+      if(marcar) boletosSelecionados.add(id); else boletosSelecionados.delete(id);
+    });
+    atualizarResumoSelecao();
+  });
+
+  document.getElementById("btnGerarRelSelecionados").addEventListener("click", async () => {
+    const ids = Array.from(boletosSelecionados);
+    if(ids.length === 0) return;
+    const formato = document.getElementById("boletosRelFormato").value;
+    const btn = document.getElementById("btnGerarRelSelecionados");
+    btn.disabled = true; const textoOriginal = btn.textContent; btn.textContent = "Gerando...";
+    try {
+      const res = await apiFetch("/api/vendas/boletos/relatorio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, formato }),
+      });
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `boletos-selecionados.${formato}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch(e){ alert(`Erro ao gerar relatório: ${e.message}`); }
+    finally { btn.disabled = boletosSelecionados.size === 0; btn.textContent = textoOriginal; }
+  });
 
   // ===== ABA NÃO CONCILIADOS =====
   const tbodyPendentes = document.getElementById("tbodyPendentes");
@@ -744,7 +839,11 @@
     if(abaAtiva() === "pendentes") carregarPendentes();
   }
 
-  // Primeiro carregamento
+  // Primeiro carregamento. A aba Boletos já abre filtrada em "hoje" (o motivo
+  // do checkbox de seleção é justamente juntar num relatório só os boletos
+  // emitidos no dia) — a pessoa pode limpar as datas pra ver tudo.
+  document.getElementById("boletosInicio").value = hojeISO();
+  document.getElementById("boletosFim").value = hojeISO();
   carregarNfs();
 })();
 </script>
