@@ -143,8 +143,8 @@
         <label for="nfsStatus">Status</label>
         <select id="nfsStatus">
           <option value="">Todas</option>
-          <option value="pendente" selected>Pendentes de divisão</option>
-          <option value="dividida">Já divididas</option>
+          <option value="pendente" selected>Não utilizadas</option>
+          <option value="dividida">Utilizadas</option>
         </select>
       </div>
       <button class="btn" id="btnAtualizarNfs">Atualizar</button>
@@ -327,7 +327,7 @@
     for(const nf of nfs){
       const tr = document.createElement("tr");
       tr.className = "linha-dado";
-      const statusBadge = nf.status === "dividida" ? `<span class="badge ok">Dividida</span>` : `<span class="badge">Pendente</span>`;
+      const statusBadge = nf.status === "dividida" ? `<span class="badge ok">Utilizada</span>` : `<span class="badge">Não utilizada</span>`;
       tr.innerHTML = `
         <td class="data">${brDate(nf.data)}</td>
         <td>${esc(nf.numero_nf)}</td>
@@ -336,21 +336,67 @@
         <td class="valor">${nf.valor != null ? brl(nf.valor) : "-"}</td>
         <td>${statusBadge}</td>
       `;
-      tr.addEventListener("click", () => abrirDivisao(nf));
+      tr.addEventListener("click", () => abrirNf(nf));
       tbodyNfs.appendChild(tr);
     }
   }
 
-  function abrirDivisao(nf){
-    if(nf.status === "dividida"){
-      divisaoBoxWrap.innerHTML = `<div class="divisao-box"><p class="info" style="margin:0">NF ${esc(nf.numero_nf)} já foi dividida.</p></div>`;
+  function tabelaBoletosHtml(boletos){
+    if(!boletos.length) return "";
+    return `
+      <table style="margin-top:14px">
+        <thead><tr><th>Seu número</th><th>Banco</th><th>Valor</th><th>Status</th><th>Pago em</th></tr></thead>
+        <tbody>
+          ${boletos.map((b) => `
+            <tr>
+              <td>${esc(b.seu_numero)}</td>
+              <td>${esc(b.banco || "-")}</td>
+              <td class="valor">${brl(b.valor)}</td>
+              <td><span class="${BADGE_STATUS_BOLETO[b.status] || 'badge'}">${TXT_STATUS_BOLETO[b.status] || b.status}</span></td>
+              <td class="data">${b.data_pagamento ? brDate(b.data_pagamento) : "-"}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  // Clicar numa NF sempre mostra embaixo os boletos daquela nota (igual a aba
+  // Boletos, só que filtrado). Se a NF ainda não foi utilizada (dividida em
+  // boletos), mostra também o formulário de divisão.
+  async function abrirNf(nf){
+    divisaoBoxWrap.innerHTML = `<div class="divisao-box"><p class="sub" style="margin:0">Carregando...</p></div>`;
+
+    let boletos = [];
+    try {
+      const data = await apiJson(`/api/vendas/nfs/${nf.id}/boletos`);
+      boletos = data.boletos || [];
+    } catch(e){
+      divisaoBoxWrap.innerHTML = `<div class="divisao-box"><p class="warn" style="margin:0">Erro ao carregar boletos: ${esc(e.message)}</p></div>`;
       return;
     }
+
+    const boletosHtml = tabelaBoletosHtml(boletos);
+
+    if(nf.status === "dividida"){
+      divisaoBoxWrap.innerHTML = `
+        <div class="divisao-box">
+          <h3>NF ${esc(nf.numero_nf)} — boletos</h3>
+          <p class="sub">Cliente: ${esc(nf.cliente || "-")} · Valor da NF: ${nf.valor != null ? brl(nf.valor) : "-"}</p>
+          ${boletosHtml || `<p class="sub" style="margin:0">Nenhum boleto encontrado pra essa NF.</p>`}
+          <div style="margin-top:14px"><button class="fechar-x" id="btnFecharDivisao">Fechar</button></div>
+        </div>
+      `;
+      document.getElementById("btnFecharDivisao").addEventListener("click", () => { divisaoBoxWrap.innerHTML = ""; });
+      return;
+    }
+
     divisaoBoxWrap.innerHTML = `
       <div class="divisao-box">
         <h3>Dividir NF ${esc(nf.numero_nf)} em boletos</h3>
         <p class="sub">Cliente: ${esc(nf.cliente || "-")} · Valor da NF: ${nf.valor != null ? brl(nf.valor) : "-"}</p>
-        <div class="field">
+        ${boletosHtml}
+        <div class="field" style="margin-top:14px">
           <label>Descreva a divisão</label>
           <textarea id="divisaoTexto" rows="2" placeholder='ex: 2 boletos banco itau valores 100,00 e 45,00'></textarea>
         </div>
