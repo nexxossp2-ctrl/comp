@@ -80,14 +80,21 @@ async function salvarProcessado(
   }
 
   // Planilha continua só com o que já foi pago (mantém o relatório/uso atual sem mudanças).
+  // Best-effort: o comprovante JÁ foi salvo no banco acima — se a planilha falhar
+  // (permissão, ID errado, etc.), isso não pode derrubar a resposta como se o
+  // comprovante inteiro tivesse falhado. Só loga e segue.
   if (status === "pago") {
-    await appendLinha({
-      data: dataFinal,
-      valor: ex.valor,
-      identificador: meta.identificador,
-      remetente: meta.remetente,
-      beneficiario: ex.beneficiario,
-    });
+    try {
+      await appendLinha({
+        data: dataFinal,
+        valor: ex.valor,
+        identificador: meta.identificador,
+        remetente: meta.remetente,
+        beneficiario: ex.beneficiario,
+      });
+    } catch (e) {
+      console.error(`[sheets] falha ao gravar ${meta.identificador} na planilha:`, e);
+    }
   }
 
   console.log(`[ok] ${meta.identificador} status=${status} valor=${ex.valor ?? "null"} data=${dataFinal} (chegada=${meta.data})`);
