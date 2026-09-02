@@ -216,7 +216,7 @@
           <div class="count" id="pagoQtd">0 comprovantes</div>
         </div>
         <div class="card-total pend">
-          <div class="label">Total solicitado no filtro</div>
+          <div class="label">Total solicitado em aberto</div>
           <div class="value" id="pagoSolicitadoTotal">R$ 0,00</div>
           <div class="count" id="pagoSolicitadoQtd">0 solicitações</div>
         </div>
@@ -489,9 +489,12 @@
     btn.textContent = "Carregando...";
 
     try {
+      // O total solicitado é saldo em aberto (não "o que aconteceu num período"), por isso
+      // não usa o filtro de data da aba Pago — senão o botão "Hoje" fazia esse total sumir
+      // pra qualquer solicitação que não foi datada hoje. Mantém só o filtro de beneficiário.
       const [dados, dadosSolicitado] = await Promise.all([
         buscarLista("pago", { inicio, fim, beneficiario }),
-        buscarLista("solicitado", { inicio, fim, beneficiario }),
+        buscarLista("solicitado", { beneficiario }),
       ]);
       if(!dados){ abrirConfig(); return; }
       if(dados.erro){ mostrarAviso(dados.erro); renderizarPago([], 0, 0, []); }
