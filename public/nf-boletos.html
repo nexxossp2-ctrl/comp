@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NF/Boletos</title>
+<style>
+  :root{
+    --bg:#F5F1E8;
+    --card:#ffffff;
+    --ink:#171512;
+    --muted:#6f6a60;
+    --line:#E4DECF;
+    --dark:#171512;
+    --dark-ink:#ffffff;
+    --accent:#6b6a1f;
+    --pend:#b6531c;
+    --pend-bg:#fbe9dd;
+    --pago:#1f6b4a;
+    --pago-bg:#e1f0e6;
+    --nf:#2a5c8a;
+    --nf-bg:#e3edf6;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:32px 20px 80px}
+  .eyebrow{font-size:12px;letter-spacing:.14em;font-weight:700;color:var(--accent);text-transform:uppercase;margin:0 0 8px}
+  h1{font-size:34px;margin:0 0 6px;letter-spacing:-.01em}
+  .sub{color:var(--muted);margin:0 0 8px;font-size:15px}
+  .link-config{background:none;border:none;padding:0;color:var(--muted);font-size:13px;text-decoration:underline;cursor:pointer;margin-bottom:24px;display:inline-block}
+  .link-config:hover{color:var(--ink)}
+
+  .tabs{display:flex;gap:6px;margin-bottom:24px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .tab-btn{border:none;background:none;padding:10px 16px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab-btn.ativa{color:var(--ink);border-bottom-color:var(--ink)}
+  .tab-panel{display:none}
+  .tab-panel.ativa{display:block}
+
+  .badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700;color:var(--pend);background:var(--pend-bg);white-space:nowrap}
+  .badge.ok{color:var(--pago);background:var(--pago-bg)}
+  .badge.nf{color:var(--nf);background:var(--nf-bg)}
+
+  .filters{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-bottom:24px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:12px;color:var(--muted);font-weight:600}
+  .field input,.field select,.field textarea{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:10px 12px;font-size:14px;color:var(--ink);min-width:150px;font-family:inherit}
+  .btn{border:none;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;background:var(--dark);color:var(--dark-ink)}
+  .btn:hover{opacity:.9}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btn.secondary{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+  .btn.small{padding:7px 12px;font-size:13px}
+
+  .card-total{background:var(--dark);color:var(--dark-ink);border-radius:14px;padding:20px;max-width:340px;margin-bottom:24px}
+  .card-total .label{font-size:13px;opacity:.7;margin-bottom:10px}
+  .card-total .value{font-size:28px;font-weight:700;letter-spacing:-.02em}
+  .card-total .count{font-size:13px;opacity:.65;margin-top:6px}
+
+  .lista-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px}
+  .lista-head h2{font-size:18px;margin:0}
+  .lista-acoes{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+  table{width:100%;border-collapse:collapse;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+  th,td{text-align:left;padding:11px 14px;font-size:13.5px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em;background:#faf8f2}
+  tr:last-child td{border-bottom:none}
+  tr.linha-dado{cursor:pointer}
+  tr.linha-dado:hover{background:#faf8f2}
+  td.valor{font-weight:700;white-space:nowrap}
+  td.data{white-space:nowrap;color:var(--muted)}
+  .empty{padding:24px;text-align:center;color:var(--muted);font-size:14px}
+  .warn{background:#fbe9dd;color:#8a3a10;border:1px solid #f0c8a8;border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:16px}
+  .info{background:#e1f0e6;color:#134d33;border:1px solid #b9dfc7;border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:16px}
+
+  .config-box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:28px;max-width:520px}
+  .config-box h2{margin:0 0 4px;font-size:18px}
+  .config-box .hint{color:var(--muted);font-size:13px;margin:0 0 16px}
+  .config-actions{display:flex;gap:8px;margin-top:14px}
+
+  .dropzone{border:2px dashed var(--line);border-radius:14px;padding:36px 20px;text-align:center;cursor:pointer;background:var(--card);margin-bottom:20px}
+  .dropzone:hover{border-color:var(--accent)}
+  .dropzone .icone{font-size:26px;margin-bottom:6px}
+  .dropzone .principal{font-weight:600;margin-bottom:4px}
+  .dropzone .secundario{color:var(--muted);font-size:13px}
+  .fila{display:flex;flex-direction:column;gap:6px;margin-bottom:32px}
+  .fila-item{display:flex;justify-content:space-between;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px}
+  .fila-status{font-size:12px;font-weight:600;padding:2px 8px;border-radius:6px}
+  .fila-status.aguardando{color:var(--muted);background:#f2efe6}
+  .fila-status.enviando{color:#8a6d1f;background:#fbf3d9}
+  .fila-status.ok{color:var(--pago);background:var(--pago-bg)}
+  .fila-status.aviso{color:var(--pend);background:var(--pend-bg)}
+  .fila-status.erro{color:#a33;background:#fbe3e3}
+
+  .divisao-box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:24px}
+  .divisao-box h3{margin:0 0 4px;font-size:16px}
+  .divisao-box .sub{margin:0 0 14px}
+  .divisao-valores{display:flex;flex-direction:column;gap:8px;margin:14px 0}
+  .divisao-valor-linha{display:flex;gap:8px;align-items:center}
+  .divisao-valor-linha input{width:140px}
+  .divisao-avisos{margin:10px 0}
+  .divisao-avisos .warn{margin-bottom:6px}
+  .fechar-x{border:none;background:none;color:var(--muted);cursor:pointer;font-size:13px;text-decoration:underline;padding:0}
+
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <p class="eyebrow">Módulo</p>
+  <h1>NF/Boletos</h1>
+  <p class="sub">Notas de venda, divisão em boletos e conferência com a folha de liquidações.</p>
+  <p class="sub" style="margin-top:-6px"><a href="/dashboard-geral.html" style="color:var(--muted)">← Comprovantes</a></p>
+  <button class="link-config" id="btnConfig">Alterar dados de acesso</button>
+
+  <div class="config-box" id="configBox" hidden>
+    <h2>Dados de acesso</h2>
+    <p class="hint">Mesma URL e senha do dashboard de Comprovantes. Fica salvo só neste navegador.</p>
+    <div class="field"><label>URL da API</label><input id="cfgUrl" placeholder="https://seu-servico.up.railway.app" /></div>
+    <div class="field"><label>Senha do dashboard</label><input id="cfgSenha" type="password" placeholder="DASHBOARD_SENHA" /></div>
+    <div class="config-actions">
+      <button class="btn secondary" id="btnFecharConfig" hidden>Cancelar</button>
+      <button class="btn" id="btnSalvarConfig">Salvar</button>
+    </div>
+  </div>
+
+  <div id="warnBox"></div>
+
+  <div class="tabs">
+    <button class="tab-btn ativa" data-tab="nfs">NFs de venda</button>
+    <button class="tab-btn" data-tab="boletos">Boletos</button>
+    <button class="tab-btn" data-tab="pendentes">Não conciliados</button>
+    <button class="tab-btn" data-tab="upload">Upload</button>
+  </div>
+
+  <!-- ===== ABA NFs ===== -->
+  <div class="tab-panel ativa" id="painelNfs">
+    <div class="filters">
+      <div class="field">
+        <label for="nfsStatus">Status</label>
+        <select id="nfsStatus">
+          <option value="">Todas</option>
+          <option value="pendente" selected>Pendentes de divisão</option>
+          <option value="dividida">Já divididas</option>
+        </select>
+      </div>
+      <button class="btn" id="btnAtualizarNfs">Atualizar</button>
+    </div>
+
+    <div id="divisaoBoxWrap"></div>
+
+    <div class="lista-head"><h2>NFs de venda</h2></div>
+    <table>
+      <thead><tr><th>Data</th><th>Nº NF</th><th>CNPJ</th><th>Cliente</th><th>Valor</th><th>Status</th></tr></thead>
+      <tbody id="tbodyNfs"></tbody>
+    </table>
+    <div class="empty" id="emptyNfs" hidden>Nenhuma NF encontrada com esse filtro.</div>
+  </div>
+
+  <!-- ===== ABA BOLETOS ===== -->
+  <div class="tab-panel" id="painelBoletos">
+    <div class="filters">
+      <div class="field">
+        <label for="boletosStatus">Status</label>
+        <select id="boletosStatus">
+          <option value="">Todos</option>
+          <option value="aberto" selected>Em aberto</option>
+          <option value="pago">Pagos</option>
+          <option value="nao_conciliado">Não conciliados</option>
+        </select>
+      </div>
+      <button class="btn" id="btnAtualizarBoletos">Atualizar</button>
+    </div>
+
+    <div class="card-total">
+      <div class="label">Total em aberto no filtro</div>
+      <div class="value" id="boletosTotal">R$ 0,00</div>
+      <div class="count" id="boletosQtd">0 boletos</div>
+    </div>
+
+    <div class="lista-head"><h2>Boletos</h2></div>
+    <table>
+      <thead><tr><th>Nº NF</th><th>Cliente</th><th>Seu número</th><th>Banco</th><th>Valor</th><th>Status</th><th>Pago em</th></tr></thead>
+      <tbody id="tbodyBoletos"></tbody>
+    </table>
+    <div class="empty" id="emptyBoletos" hidden>Nenhum boleto encontrado com esse filtro.</div>
+  </div>
+
+  <!-- ===== ABA NÃO CONCILIADOS ===== -->
+  <div class="tab-panel" id="painelPendentes">
+    <p class="sub">Linhas da folha de liquidações que não bateram automaticamente com nenhum boleto em aberto (seu número + valor). Vincule manualmente ao boleto certo.</p>
+    <div class="lista-head">
+      <h2>Pendentes de revisão</h2>
+      <button class="btn secondary small" id="btnAtualizarPendentes">Atualizar</button>
+    </div>
+    <table>
+      <thead><tr><th>Pagador</th><th>Valor</th><th>Seu número</th><th>Vincular a</th><th></th></tr></thead>
+      <tbody id="tbodyPendentes"></tbody>
+    </table>
+    <div class="empty" id="emptyPendentes" hidden>Nenhuma pendência de conciliação.</div>
+  </div>
+
+  <!-- ===== ABA UPLOAD ===== -->
+  <div class="tab-panel" id="painelUpload">
+    <p class="eyebrow" style="margin-top:0">Entrada de arquivos</p>
+    <h2 style="margin:0 0 4px;font-size:22px">Enviar NF (XML)</h2>
+    <p class="sub">O XML da NF-e já emitida. Até 20 arquivos por envio.</p>
+    <div class="dropzone" id="dropzoneXml">
+      <div class="icone">⬆</div>
+      <div class="principal">Arraste o(s) XML aqui</div>
+      <div class="secundario">ou clique para selecionar</div>
+      <input type="file" id="inputXml" accept=".xml" multiple hidden />
+    </div>
+    <div class="fila" id="filaXml"></div>
+
+    <h2 style="margin:0 0 4px;font-size:22px">Enviar folha de liquidações (CSV)</h2>
+    <p class="sub">Colunas esperadas: pagador, valor, seu número. Concilia automaticamente os boletos em aberto.</p>
+    <div class="dropzone" id="dropzoneCsv">
+      <div class="icone">⬆</div>
+      <div class="principal">Arraste o CSV aqui</div>
+      <div class="secundario">ou clique para selecionar</div>
+      <input type="file" id="inputCsv" accept=".csv" hidden />
+    </div>
+    <div class="fila" id="filaCsv"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const LS_KEY = "dashboardConfig"; // mesma config do dashboard de Comprovantes
+  const brl = (n) => (Number(n)||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+  const brDate = (iso) => { if(!iso) return "-"; const [y,m,d]=iso.split("-"); return d+"/"+m+"/"+y; };
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+
+  function loadConfig(){ try { return JSON.parse(localStorage.getItem(LS_KEY) || "null"); } catch(e){ return null; } }
+  function saveConfig(cfg){ try { localStorage.setItem(LS_KEY, JSON.stringify(cfg)); } catch(e){} }
+
+  // ===== Config =====
+  const configBox = document.getElementById("configBox");
+  const btnConfig = document.getElementById("btnConfig");
+  const btnFecharConfig = document.getElementById("btnFecharConfig");
+  const btnSalvarConfig = document.getElementById("btnSalvarConfig");
+
+  function abrirConfig(){
+    const cfg = loadConfig();
+    if(cfg){
+      document.getElementById("cfgUrl").value = cfg.url || "";
+      document.getElementById("cfgSenha").value = cfg.senha || "";
+      btnFecharConfig.hidden = false;
+    } else { btnFecharConfig.hidden = true; }
+    configBox.hidden = false;
+  }
+  function fecharConfig(){ configBox.hidden = true; }
+  btnConfig.addEventListener("click", abrirConfig);
+  btnFecharConfig.addEventListener("click", fecharConfig);
+  btnSalvarConfig.addEventListener("click", () => {
+    const cfg = { url: document.getElementById("cfgUrl").value.trim().replace(/\/$/,""), senha: document.getElementById("cfgSenha").value };
+    if(!cfg.url){ alert("Preencha a URL da API."); return; }
+    saveConfig(cfg);
+    fecharConfig();
+    carregarAbaAtiva();
+  });
+
+  // ===== Tabs =====
+  const tabBtns = Array.from(document.querySelectorAll(".tab-btn"));
+  const paineis = { nfs: document.getElementById("painelNfs"), boletos: document.getElementById("painelBoletos"), pendentes: document.getElementById("painelPendentes"), upload: document.getElementById("painelUpload") };
+  function ativarTab(nome){
+    tabBtns.forEach((b) => b.classList.toggle("ativa", b.dataset.tab === nome));
+    Object.entries(paineis).forEach(([k, el]) => el.classList.toggle("ativa", k === nome));
+    carregarAbaAtiva();
+  }
+  tabBtns.forEach((b) => b.addEventListener("click", () => ativarTab(b.dataset.tab)));
+  function abaAtiva(){ return tabBtns.find((b) => b.classList.contains("ativa"))?.dataset.tab || "nfs"; }
+  function carregarAbaAtiva(){
+    const a = abaAtiva();
+    if(a === "nfs") carregarNfs();
+    else if(a === "boletos") carregarBoletos();
+    else if(a === "pendentes") carregarPendentes();
+  }
+
+  // ===== fetch helper =====
+  async function apiFetch(path, opts){
+    const cfg = loadConfig();
+    if(!cfg || !cfg.url){ abrirConfig(); throw new Error("sem configuração"); }
+    const headers = Object.assign({ "X-Senha": cfg.senha || "" }, (opts && opts.headers) || {});
+    const res = await fetch(`${cfg.url}${path}`, Object.assign({}, opts, { headers }));
+    if(res.status === 401){ throw new Error("Senha incorreta."); }
+    if(!res.ok){
+      let detalhe = `erro ${res.status}`;
+      try { const corpo = await res.json(); if(corpo?.erro) detalhe = corpo.erro; } catch(e){}
+      throw new Error(detalhe);
+    }
+    return res;
+  }
+  async function apiJson(path, opts){
+    const res = await apiFetch(path, opts);
+    return res.json();
+  }
+
+  function mostrarAviso(msg, classe){
+    document.getElementById("warnBox").innerHTML = `<div class="${classe || 'warn'}">${esc(msg)}</div>`;
+  }
+
+  // ===== ABA NFs =====
+  const tbodyNfs = document.getElementById("tbodyNfs");
+  const emptyNfs = document.getElementById("emptyNfs");
+  const divisaoBoxWrap = document.getElementById("divisaoBoxWrap");
+
+  document.getElementById("btnAtualizarNfs").addEventListener("click", carregarNfs);
+  document.getElementById("nfsStatus").addEventListener("change", carregarNfs);
+
+  async function carregarNfs(){
+    try {
+      const status = document.getElementById("nfsStatus").value;
+      const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+      const { nfs } = await apiJson(`/api/vendas/nfs${qs}`);
+      renderNfs(nfs);
+    } catch(e){ mostrarAviso(`Erro ao carregar NFs: ${e.message}`); }
+  }
+
+  function renderNfs(nfs){
+    tbodyNfs.innerHTML = "";
+    emptyNfs.hidden = nfs.length > 0;
+    for(const nf of nfs){
+      const tr = document.createElement("tr");
+      tr.className = "linha-dado";
+      const statusBadge = nf.status === "dividida" ? `<span class="badge ok">Dividida</span>` : `<span class="badge">Pendente</span>`;
+      tr.innerHTML = `
+        <td class="data">${brDate(nf.data)}</td>
+        <td>${esc(nf.numero_nf)}</td>
+        <td>${esc(nf.cnpj || "-")}</td>
+        <td>${esc(nf.cliente || "-")}</td>
+        <td class="valor">${nf.valor != null ? brl(nf.valor) : "-"}</td>
+        <td>${statusBadge}</td>
+      `;
+      tr.addEventListener("click", () => abrirDivisao(nf));
+      tbodyNfs.appendChild(tr);
+    }
+  }
+
+  function abrirDivisao(nf){
+    if(nf.status === "dividida"){
+      divisaoBoxWrap.innerHTML = `<div class="divisao-box"><p class="info" style="margin:0">NF ${esc(nf.numero_nf)} já foi dividida.</p></div>`;
+      return;
+    }
+    divisaoBoxWrap.innerHTML = `
+      <div class="divisao-box">
+        <h3>Dividir NF ${esc(nf.numero_nf)} em boletos</h3>
+        <p class="sub">Cliente: ${esc(nf.cliente || "-")} · Valor da NF: ${nf.valor != null ? brl(nf.valor) : "-"}</p>
+        <div class="field">
+          <label>Descreva a divisão</label>
+          <textarea id="divisaoTexto" rows="2" placeholder='ex: 2 boletos banco itau valores 100,00 e 45,00'></textarea>
+        </div>
+        <div style="margin-top:10px"><button class="btn secondary small" id="btnAnalisarDivisao">Analisar</button></div>
+        <div id="divisaoPrevia"></div>
+        <div style="margin-top:14px"><button class="fechar-x" id="btnFecharDivisao">Cancelar</button></div>
+      </div>
+    `;
+    document.getElementById("btnFecharDivisao").addEventListener("click", () => { divisaoBoxWrap.innerHTML = ""; });
+    document.getElementById("btnAnalisarDivisao").addEventListener("click", () => analisarDivisao(nf));
+  }
+
+  async function analisarDivisao(nf){
+    const texto = document.getElementById("divisaoTexto").value.trim();
+    if(!texto){ alert("Digite a descrição da divisão."); return; }
+    let parsed;
+    try { parsed = await apiJson("/api/vendas/parse-divisao", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto }) }); }
+    catch(e){ alert(`Erro ao analisar: ${e.message}`); return; }
+    renderPreviaDivisao(nf, parsed);
+  }
+
+  function renderPreviaDivisao(nf, parsed){
+    const previa = document.getElementById("divisaoPrevia");
+    const avisosHtml = (parsed.avisos || []).map((a) => `<div class="warn">${esc(a)}</div>`).join("");
+    const valores = parsed.valores && parsed.valores.length ? parsed.valores : [0];
+    const linhasHtml = valores.map((v, i) => `
+      <div class="divisao-valor-linha" data-idx="${i}">
+        <input type="number" step="0.01" class="divisao-valor-input" value="${v}" />
+        <button class="fechar-x remover-valor" data-idx="${i}">remover</button>
+      </div>
+    `).join("");
+
+    previa.innerHTML = `
+      <div class="divisao-avisos">${avisosHtml}</div>
+      <div class="field"><label>Banco</label><input id="divisaoBanco" value="${esc(parsed.banco || "")}" placeholder="ex: Itaú" /></div>
+      <div class="divisao-valores" id="divisaoValores">${linhasHtml}</div>
+      <button class="btn secondary small" id="btnAddValor">+ adicionar boleto</button>
+      <div style="margin-top:14px"><button class="btn small" id="btnConfirmarDivisao">Confirmar divisão</button></div>
+    `;
+
+    function religar(){
+      Array.from(previa.querySelectorAll(".remover-valor")).forEach((b) => b.addEventListener("click", () => {
+        b.closest(".divisao-valor-linha").remove();
+      }));
+    }
+    religar();
+
+    document.getElementById("btnAddValor").addEventListener("click", () => {
+      const div = document.getElementById("divisaoValores");
+      const linha = document.createElement("div");
+      linha.className = "divisao-valor-linha";
+      linha.innerHTML = `<input type="number" step="0.01" class="divisao-valor-input" value="0" /><button class="fechar-x remover-valor">remover</button>`;
+      div.appendChild(linha);
+      religar();
+    });
+
+    document.getElementById("btnConfirmarDivisao").addEventListener("click", () => confirmarDivisao(nf));
+  }
+
+  async function confirmarDivisao(nf){
+    const banco = document.getElementById("divisaoBanco").value.trim() || null;
+    const valores = Array.from(document.querySelectorAll(".divisao-valor-input")).map((el) => Number(el.value)).filter((v) => Number.isFinite(v) && v > 0);
+    if(valores.length === 0){ alert("Informe ao menos um valor válido."); return; }
+    const itens = valores.map((valor) => ({ banco, valor }));
+
+    const btn = document.getElementById("btnConfirmarDivisao");
+    btn.disabled = true; btn.textContent = "Salvando...";
+    try {
+      const resultado = await apiJson(`/api/vendas/nfs/${nf.id}/dividir`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itens }) });
+      divisaoBoxWrap.innerHTML = `
+        <div class="divisao-box">
+          <p class="info" style="margin:0 0 12px">Divisão salva: ${itens.length} boleto(s). Relatório de solicitação #${resultado.relatorioId}.</p>
+          <button class="btn secondary small" id="btnBaixarRelPdf">Baixar relatório (PDF)</button>
+          <button class="btn secondary small" id="btnBaixarRelXlsx">Baixar relatório (XLSX)</button>
+        </div>
+      `;
+      document.getElementById("btnBaixarRelPdf").addEventListener("click", () => baixarRelatorio(resultado.relatorioId, "pdf"));
+      document.getElementById("btnBaixarRelXlsx").addEventListener("click", () => baixarRelatorio(resultado.relatorioId, "xlsx"));
+      carregarNfs();
+    } catch(e){
+      alert(`Erro ao confirmar divisão: ${e.message}`);
+    } finally { btn.disabled = false; btn.textContent = "Confirmar divisão"; }
+  }
+
+  async function baixarRelatorio(relatorioId, formato){
+    try {
+      const res = await apiFetch(`/api/vendas/relatorio/${relatorioId}?formato=${formato}`);
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `solicitacao-${relatorioId}.${formato}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch(e){ alert(`Erro ao baixar relatório: ${e.message}`); }
+  }
+
+  // ===== ABA BOLETOS =====
+  const tbodyBoletos = document.getElementById("tbodyBoletos");
+  const emptyBoletos = document.getElementById("emptyBoletos");
+  document.getElementById("btnAtualizarBoletos").addEventListener("click", carregarBoletos);
+  document.getElementById("boletosStatus").addEventListener("change", carregarBoletos);
+
+  const BADGE_STATUS_BOLETO = { aberto: "badge", pago: "badge ok", nao_conciliado: "badge" };
+  const TXT_STATUS_BOLETO = { aberto: "Em aberto", pago: "Pago", nao_conciliado: "Não conciliado" };
+
+  async function carregarBoletos(){
+    try {
+      const status = document.getElementById("boletosStatus").value;
+      const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+      const { boletos } = await apiJson(`/api/vendas/boletos${qs}`);
+      renderBoletos(boletos);
+    } catch(e){ mostrarAviso(`Erro ao carregar boletos: ${e.message}`); }
+  }
+
+  function renderBoletos(boletos){
+    tbodyBoletos.innerHTML = "";
+    emptyBoletos.hidden = boletos.length > 0;
+    let total = 0, qtd = 0;
+    for(const b of boletos){
+      if(b.status === "aberto"){ total += Number(b.valor) || 0; qtd++; }
+      const tr = document.createElement("tr");
+      const cls = BADGE_STATUS_BOLETO[b.status] || "badge";
+      tr.innerHTML = `
+        <td>${esc(b.nf?.numero_nf || "-")}</td>
+        <td>${esc(b.nf?.cliente || "-")}</td>
+        <td>${esc(b.seu_numero)}</td>
+        <td>${esc(b.banco || "-")}</td>
+        <td class="valor">${brl(b.valor)}</td>
+        <td><span class="${cls}">${TXT_STATUS_BOLETO[b.status] || b.status}</span></td>
+        <td class="data">${b.data_pagamento ? brDate(b.data_pagamento) : "-"}</td>
+      `;
+      tbodyBoletos.appendChild(tr);
+    }
+    document.getElementById("boletosTotal").textContent = brl(total);
+    document.getElementById("boletosQtd").textContent = `${qtd} boleto${qtd === 1 ? "" : "s"} em aberto`;
+  }
+
+  // ===== ABA NÃO CONCILIADOS =====
+  const tbodyPendentes = document.getElementById("tbodyPendentes");
+  const emptyPendentes = document.getElementById("emptyPendentes");
+  document.getElementById("btnAtualizarPendentes").addEventListener("click", carregarPendentes);
+
+  async function carregarPendentes(){
+    try {
+      const [{ pendentes }, { boletos: abertos }] = await Promise.all([
+        apiJson("/api/vendas/conciliacoes-pendentes"),
+        apiJson("/api/vendas/boletos?status=aberto"),
+      ]);
+      renderPendentes(pendentes, abertos);
+    } catch(e){ mostrarAviso(`Erro ao carregar pendências: ${e.message}`); }
+  }
+
+  function renderPendentes(pendentes, abertos){
+    tbodyPendentes.innerHTML = "";
+    emptyPendentes.hidden = pendentes.length > 0;
+    const opcoesBoletos = abertos.map((b) => `<option value="${b.id}">${esc(b.seu_numero)} · ${brl(b.valor)} · ${esc(b.nf?.cliente || "-")}</option>`).join("");
+    for(const p of pendentes){
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${esc(p.pagador || "-")}</td>
+        <td class="valor">${p.valor != null ? brl(p.valor) : "-"}</td>
+        <td>${esc(p.seu_numero || "-")}</td>
+        <td><select class="select-boleto">${opcoesBoletos || "<option value=''>nenhum boleto em aberto</option>"}</select></td>
+        <td><button class="btn secondary small btn-resolver" data-id="${p.id}">Vincular</button></td>
+      `;
+      tbodyPendentes.appendChild(tr);
+    }
+    Array.from(tbodyPendentes.querySelectorAll(".btn-resolver")).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const tr = btn.closest("tr");
+        const boletoId = Number(tr.querySelector(".select-boleto").value);
+        if(!boletoId){ alert("Não há boleto em aberto pra vincular."); return; }
+        btn.disabled = true;
+        try {
+          await apiJson(`/api/vendas/conciliacoes-pendentes/${btn.dataset.id}/resolver`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ boletoId }) });
+          carregarPendentes();
+        } catch(e){ alert(`Erro ao vincular: ${e.message}`); btn.disabled = false; }
+      });
+    });
+  }
+
+  // ===== ABA UPLOAD =====
+  const MAX_ARQUIVOS = 20;
+
+  function lerComoDataUrl(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+  function lerComoTexto(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  }
+  function atualizarStatusFila(elStatus, texto, classe){
+    elStatus.textContent = texto;
+    elStatus.className = `fila-status ${classe}`;
+  }
+
+  // ---- Upload XML ----
+  const dropzoneXml = document.getElementById("dropzoneXml");
+  const inputXml = document.getElementById("inputXml");
+  const filaXml = document.getElementById("filaXml");
+  dropzoneXml.addEventListener("click", () => inputXml.click());
+  dropzoneXml.addEventListener("dragover", (e) => { e.preventDefault(); dropzoneXml.style.borderColor = "var(--accent)"; });
+  dropzoneXml.addEventListener("dragleave", () => { dropzoneXml.style.borderColor = ""; });
+  dropzoneXml.addEventListener("drop", (e) => {
+    e.preventDefault(); dropzoneXml.style.borderColor = "";
+    processarXmls(e.dataTransfer.files);
+  });
+  inputXml.addEventListener("change", () => { processarXmls(inputXml.files); inputXml.value = ""; });
+
+  async function processarXmls(fileList){
+    const cfg = loadConfig();
+    if(!cfg || !cfg.url){ abrirConfig(); return; }
+    let arquivos = Array.from(fileList);
+    if(arquivos.length > MAX_ARQUIVOS){
+      alert(`Máximo de ${MAX_ARQUIVOS} arquivos por envio. Só os primeiros ${MAX_ARQUIVOS} vão ser enviados.`);
+      arquivos = arquivos.slice(0, MAX_ARQUIVOS);
+    }
+    const itensFila = arquivos.map((file) => {
+      const linha = document.createElement("div");
+      linha.className = "fila-item";
+      linha.innerHTML = `<span class="nome">${esc(file.name)}</span><span class="fila-status aguardando">Aguardando</span>`;
+      filaXml.prepend(linha);
+      return { file, elStatus: linha.querySelector(".fila-status") };
+    });
+    for(const { file, elStatus } of itensFila){
+      atualizarStatusFila(elStatus, "Enviando...", "enviando");
+      try {
+        const dataUrl = await lerComoDataUrl(file);
+        const data = await apiJson("/api/vendas/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file: dataUrl, fileName: file.name }) });
+        if(data.ok === false){ atualizarStatusFila(elStatus, data.motivo || "Não processado", "aviso"); continue; }
+        const nf = data.nf || {};
+        atualizarStatusFila(elStatus, `OK · NF ${nf.numero_nf || "?"} · ${nf.valor != null ? brl(nf.valor) : ""}`.trim(), "ok");
+      } catch(e){ atualizarStatusFila(elStatus, e.message || "Falha de conexão", "erro"); }
+    }
+    if(abaAtiva() === "nfs") carregarNfs();
+  }
+
+  // ---- Upload CSV ----
+  const dropzoneCsv = document.getElementById("dropzoneCsv");
+  const inputCsv = document.getElementById("inputCsv");
+  const filaCsv = document.getElementById("filaCsv");
+  dropzoneCsv.addEventListener("click", () => inputCsv.click());
+  dropzoneCsv.addEventListener("dragover", (e) => { e.preventDefault(); dropzoneCsv.style.borderColor = "var(--accent)"; });
+  dropzoneCsv.addEventListener("dragleave", () => { dropzoneCsv.style.borderColor = ""; });
+  dropzoneCsv.addEventListener("drop", (e) => {
+    e.preventDefault(); dropzoneCsv.style.borderColor = "";
+    if(e.dataTransfer.files[0]) processarCsv(e.dataTransfer.files[0]);
+  });
+  inputCsv.addEventListener("change", () => { if(inputCsv.files[0]) processarCsv(inputCsv.files[0]); inputCsv.value = ""; });
+
+  async function processarCsv(file){
+    const cfg = loadConfig();
+    if(!cfg || !cfg.url){ abrirConfig(); return; }
+    const linha = document.createElement("div");
+    linha.className = "fila-item";
+    linha.innerHTML = `<span class="nome">${esc(file.name)}</span><span class="fila-status aguardando">Aguardando</span>`;
+    filaCsv.prepend(linha);
+    const elStatus = linha.querySelector(".fila-status");
+    atualizarStatusFila(elStatus, "Processando...", "enviando");
+    try {
+      const conteudo = await lerComoTexto(file);
+      const data = await apiJson("/api/vendas/csv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conteudo }) });
+      atualizarStatusFila(elStatus, `${data.conciliados} conciliado(s), ${data.naoConciliados} pendente(s) de revisão`, data.naoConciliados > 0 ? "aviso" : "ok");
+    } catch(e){ atualizarStatusFila(elStatus, e.message || "Falha de conexão", "erro"); }
+    if(abaAtiva() === "boletos") carregarBoletos();
+    if(abaAtiva() === "pendentes") carregarPendentes();
+  }
+
+  // Primeiro carregamento
+  carregarNfs();
+})();
+</script>
+</body>
+</html>
