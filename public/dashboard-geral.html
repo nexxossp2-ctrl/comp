@@ -269,6 +269,7 @@
       <div class="field"><label for="solFim">Fim</label><input type="date" id="solFim" /></div>
       <div class="field"><label for="solBeneficiario">Beneficiário</label><input type="text" id="solBeneficiario" placeholder="Buscar por nome" /></div>
       <button class="btn" id="btnAtualizarSol">Atualizar</button>
+      <button class="btn secondary" id="btnHojeSol">Hoje</button>
     </div>
 
     <div class="card-total" style="max-width:340px;margin-bottom:24px">
@@ -809,6 +810,12 @@
   }
 
   document.getElementById("btnAtualizarSol").addEventListener("click", carregarSolicitado);
+
+  document.getElementById("btnHojeSol").addEventListener("click", () => {
+    document.getElementById("solInicio").value = hojeISO();
+    document.getElementById("solFim").value = hojeISO();
+    carregarSolicitado();
+  });
 
   document.getElementById("checkTodosSol").addEventListener("change", (ev) => {
     const marcado = ev.target.checked;
