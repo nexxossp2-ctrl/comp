@@ -9,6 +9,22 @@ import { gerarPDF, gerarXLSX, type ItemRelatorio } from "./relatorio-arquivo.js"
 import { gerarRelatorio } from "./report.js";
 import { enviarEmail, enviarWhatsapp, enviarEmailComAnexos } from "./send.js";
 import { dataSP, dataBR } from "./util.js";
+import { extrairXmlNFe } from "./extract-nfe.js";
+import { parseDivisao } from "./parse-divisao.js";
+import { conciliarLiquidacao } from "./csv-liquidacao.js";
+import {
+  salvarNfVenda,
+  subirArquivoXmlVenda,
+  listarNfsVenda,
+  buscarNfVendaPorId,
+  dividirNfEmBoletos,
+  listarBoletosVenda,
+  listarBoletosPorNf,
+  listarConciliacoesPendentes,
+  resolverConciliacaoPendente,
+  buscarRelatorioPorId,
+} from "./vendas.js";
+import { gerarPDFBoletos, gerarXLSXBoletos, type ItemRelatorioBoleto } from "./relatorio-boletos.js";
 
 const app = express();
 app.use(express.json({ limit: "25mb" }));
@@ -16,6 +32,10 @@ app.use(express.json({ limit: "25mb" }));
 app.use(express.static(path.join(process.cwd(), "public")));
 
 const GRUPO_ID = (process.env.GRUPO_ID || "").trim();
+// Grupo separado, só pra NFs de venda (contas a receber) — módulo NF/Boletos.
+// Documento chegando nesse grupo NUNCA passa pelo fluxo de comprovantes/boletos
+// a pagar; vai direto pro processamento de XML de NF-e.
+const GRUPO_ID_VENDAS = (process.env.GRUPO_ID_VENDAS || "").trim();
 
 type ResultadoProc =
   | { status: "salvo"; tipo: "pago" | "solicitado"; valor: number | null; beneficiario: string | null }
@@ -123,6 +143,62 @@ function extrairArquivo(body: any): { url: string; mime: string; fileName?: stri
   return null;
 }
 
+/** Igual extrairArquivo, mas só pra XML — usado no grupo de vendas (NF de venda vem em XML). */
+function extrairArquivoXml(body: any): { url: string; fileName?: string } | null {
+  const doc = body.document;
+  if (!doc?.documentUrl) return null;
+  const mime = (doc.mimeType || "").toLowerCase();
+  const nome = (doc.fileName || "").toLowerCase();
+  if (mime.includes("xml") || nome.endsWith(".xml")) {
+    return { url: doc.documentUrl, fileName: doc.fileName };
+  }
+  return null;
+}
+
+/**
+ * Processa uma NF de venda: baixa o XML, extrai os dados e salva. Usado tanto
+ * pelo grupo do WhatsApp dedicado a vendas quanto pelo upload manual.
+ */
+async function processarNfVenda(
+  xmlTexto: string,
+  meta: { identificador: string; fileName?: string | null; arquivoUrl: string | null; dataChegada: string },
+): Promise<{ status: "salvo"; nf: Awaited<ReturnType<typeof salvarNfVenda>> } | { status: "ignorado"; motivo: string } | { status: "duplicado" }> {
+  const dados = extrairXmlNFe(xmlTexto);
+
+  if (!dados.numeroNf) {
+    console.log(`[vendas][ignorado] ${meta.identificador} não parece um XML de NF-e válido`);
+    return { status: "ignorado", motivo: "Não consegui ler um número de NF nesse XML. Confira se é o arquivo certo." };
+  }
+
+  const dataValida = /^\d{4}-\d{2}-\d{2}$/.test(dados.dataEmissao || "");
+  const dataFinal = dataValida ? (dados.dataEmissao as string) : meta.dataChegada;
+
+  let nf;
+  try {
+    nf = await salvarNfVenda({
+      message_id: meta.identificador,
+      numero_nf: dados.numeroNf,
+      cnpj: dados.cnpj,
+      cliente: dados.cliente,
+      valor: dados.valor,
+      data: dataFinal,
+      arquivo_url: meta.arquivoUrl,
+      file_name: meta.fileName ?? null,
+    });
+  } catch (e) {
+    console.error(`[vendas] falha ao salvar NF ${meta.identificador}:`, e);
+    throw e;
+  }
+
+  if (!nf) {
+    console.log(`[vendas][dup] ${meta.identificador} já processado`);
+    return { status: "duplicado" };
+  }
+
+  console.log(`[vendas][ok] NF ${dados.numeroNf} cliente=${dados.cliente || "?"} valor=${dados.valor ?? "null"} data=${dataFinal}`);
+  return { status: "salvo", nf };
+}
+
 // Token de segurança que o Z-API manda no header de cada webhook.
 // Se WEBHOOK_TOKEN estiver configurado, exige que o header bata.
 const WEBHOOK_TOKEN = (process.env.WEBHOOK_TOKEN || "").trim();
@@ -156,6 +232,32 @@ app.post("/webhook", async (req, res) => {
     console.log(`[recebido] grupo=${body.phone} nome=${body.chatName || "(sem nome)"}`);
 
     const phoneRecebido = String(body.phone || "").trim();
+
+    // Grupo de vendas: fluxo totalmente separado (NF de venda em XML, não
+    // comprovante/boleto a pagar). Sai daqui, nunca cai no fluxo de baixo.
+    if (GRUPO_ID_VENDAS && phoneRecebido === GRUPO_ID_VENDAS) {
+      const arquivoXml = extrairArquivoXml(body);
+      if (!arquivoXml) return; // texto, imagem, etc — ignora
+      const messageId: string = body.messageId;
+      if (!messageId) return;
+
+      const data = dataSP(body.momment ?? Date.now());
+      const resXml = await fetch(arquivoXml.url);
+      if (!resXml.ok) {
+        console.error(`[vendas] falha ao baixar xml (${resXml.status})`);
+        return;
+      }
+      const xmlTexto = await resXml.text();
+      const arquivoUrl = await subirArquivoXmlVenda(xmlTexto, messageId);
+
+      await processarNfVenda(xmlTexto, {
+        identificador: messageId,
+        fileName: arquivoXml.fileName ?? null,
+        arquivoUrl,
+        dataChegada: data,
+      });
+      return;
+    }
 
     if (GRUPO_ID && phoneRecebido !== GRUPO_ID) {
       console.log(
@@ -566,6 +668,215 @@ app.get("/relatorio/preview", async (req, res) => {
   } catch (e) {
     console.error("[relatorio/preview] erro:", e);
     res.status(500).send(String(e));
+  }
+});
+
+// ================================================================
+// MÓDULO NF/BOLETOS (contas a receber) — endpoints do dashboard novo
+// (public/nf-boletos.html). Reaproveita a mesma senha do dashboard atual.
+// ================================================================
+
+function corsVendas(res: express.Response, metodos: string) {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", `${metodos}, OPTIONS`);
+  res.set("Access-Control-Allow-Headers", "Content-Type, X-Senha");
+}
+
+app.options("/api/vendas/*", (_req, res) => {
+  corsVendas(res, "GET, POST, OPTIONS");
+  res.sendStatus(204);
+});
+
+app.get("/api/vendas/nfs", async (req, res) => {
+  corsVendas(res, "GET");
+  if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
+  try {
+    const status = (req.query.status as string) || undefined;
+    const nfs = await listarNfsVenda(status === "pendente" || status === "dividida" ? status : undefined);
+    res.json({ nfs });
+  } catch (e) {
+    console.error("[vendas/nfs] erro:", e);
+    res.status(500).json({ erro: String(e) });
+  }
+});
+
+// Upload manual do XML da NF de venda (equivalente ao /api/upload dos comprovantes).
+app.post("/api/vendas/upload", async (req, res) => {
+  corsVendas(res, "POST");
+  if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
+  try {
+    const { file, fileName } = req.body || {};
+    if (!file || typeof file !== "string") {
+      return res.status(400).json({ erro: "campo 'file' é obrigatório" });
+    }
+    // Aceita texto puro do XML, base64 puro, ou data URL ("data:...;base64,XXX").
+    let xmlTexto: string;
+    if (file.trim().startsWith("<")) {
+      xmlTexto = file;
+    } else {
+      const base64 = file.includes(",") ? file.split(",")[1] : file;
+      xmlTexto = Buffer.from(base64, "base64").toString("utf-8");
+    }
+
+    const hash = createHash("sha256").update(xmlTexto).digest("hex").slice(0, 24);
+    const identificador = `upload-venda-${hash}`;
+    const arquivoUrl = await subirArquivoXmlVenda(xmlTexto, identificador);
+
+    const r = await processarNfVenda(xmlTexto, {
+      identificador,
+      fileName: fileName ?? null,
+      arquivoUrl,
+      dataChegada: dataSP(),
+    });
+
+    if (r.status === "ignorado") return res.status(200).json({ ok: false, motivo: r.motivo });
+    if (r.status === "duplicado") return res.status(200).json({ ok: false, motivo: "Esta NF já foi enviada antes." });
+    return res.json({ ok: true, nf: r.nf });
+  } catch (e) {
+    console.error("[vendas/upload] erro:", e);
+    if (!res.headersSent) res.status(500).json({ erro: String(e) });
+  }
+});
+
+// Só interpreta o texto livre da divisão (prévia) — não grava nada ainda.
+app.post("/api/vendas/parse-divisao", async (req, res) => {
+  corsVendas(res, "POST");
+  if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
+  try {
+    const texto: string = String(req.body?.texto || "");
+    const parsed = parseDivisao(texto);
+    res.json(parsed);
+  } catch (e) {
+    console.error("[vendas/parse-divisao] erro:", e);
+    res.status(500).json({ erro: String(e) });
+  }
+});
+
+// Confirma a divisão (já revisada pela pessoa) e grava os boletos + relatório.
+// body: { itens: [{ banco: string|null, valor: number }, ...] }
+app.post("/api/vendas/nfs/:id/dividir", async (req, res) => {
+  corsVendas(res, "POST");
+  if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
+  try {
+    const nfId = Number(req.params.id);
+    const itens: { banco: string | null; valor: number }[] = Array.isArray(req.body?.itens) ? req.body.itens : [];
+    if (!nfId || itens.length === 0) return res.status(400).json({ erro: "nf inválida ou nenhum item pra dividir" });
+
+    const nf = await buscarNfVendaPorId(nfId);
+    if (!nf) return res.status(404).json({ erro: "NF não encontrada" });
+    if (nf.status === "dividida") return res.status(409).json({ erro: "esta NF já foi dividida antes" });
+
+    const itensValidos = itens
+      .map((it) => ({ banco: it.banco || null, valor: Number(it.valor) }))
+      .filter((it) => Number.isFinite(it.valor) && it.valor > 0);
+    if (itensValidos.length === 0) return res.status(400).json({ erro: "nenhum valor válido informado" });
+
+    const { boletos, relatorioId } = await dividirNfEmBoletos(nfId, nf.numero_nf, itensValidos);
+    res.json({ ok: true, boletos, relatorioId });
+  } catch (e) {
+    console.error("[vendas/dividir] erro:", e);
+    if (!res.headersSent) res.status(500).json({ erro: String(e) });
+  }
+});
+
+app.get("/api/vendas/boletos", async (req, res) => {
+  corsVendas(res, "GET");
+  if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
+  try {
+    const status = (req.query.status as string) || undefined;
+    const boletos = await listarBoletosVenda(
+      status === "aberto" || status === "pago" || status === "nao_conciliado" ? status : undefined,
+    );
+    res.json({ boletos });
+  } catch (e) {
+    console.error("[vendas/boletos] erro:", e);
+    res.status(500).json({ erro: String(e) });
+  }
+});
+
+// Relatório de solicitação (PDF/XLSX) de uma divisão específica.
+app.get("/api/vendas/relatorio/:relatorioId", async (req, res) => {
+  corsVendas(res, "GET");
+  if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
+  try {
+    const relatorioId = Number(req.params.relatorioId);
+    const formato = ((req.query.formato as string) || "pdf").toLowerCase();
+
+    const relatorio = await buscarRelatorioPorId(relatorioId);
+    if (!relatorio) return res.status(404).json({ erro: "relatório não encontrado" });
+    const nf = await buscarNfVendaPorId(relatorio.nf_id);
+    if (!nf) return res.status(404).json({ erro: "NF do relatório não encontrada" });
+    const boletos = await listarBoletosPorNf(relatorio.nf_id);
+
+    const itens: ItemRelatorioBoleto[] = boletos.map((b) => ({
+      data: nf.data,
+      numeroNf: nf.numero_nf,
+      cnpj: nf.cnpj,
+      cliente: nf.cliente,
+      seuNumero: b.seu_numero,
+      banco: b.banco,
+      valor: b.valor,
+    }));
+
+    if (formato === "xlsx" || formato === "xls") {
+      const buf = await gerarXLSXBoletos(relatorioId, itens);
+      res.set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.set("Content-Disposition", `attachment; filename="solicitacao-${relatorioId}.xlsx"`);
+      return res.send(buf);
+    } else {
+      const buf = await gerarPDFBoletos(relatorioId, itens);
+      res.set("Content-Type", "application/pdf");
+      res.set("Content-Disposition", `attachment; filename="solicitacao-${relatorioId}.pdf"`);
+      return res.send(buf);
+    }
+  } catch (e) {
+    console.error("[vendas/relatorio] erro:", e);
+    if (!res.headersSent) res.status(500).json({ erro: String(e) });
+  }
+});
+
+// Upload da folha de liquidações (CSV) e conciliação automática.
+// body: { conteudo: string } — texto puro do CSV.
+app.post("/api/vendas/csv", async (req, res) => {
+  corsVendas(res, "POST");
+  if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
+  try {
+    const conteudo: string = String(req.body?.conteudo || "");
+    if (!conteudo.trim()) return res.status(400).json({ erro: "campo 'conteudo' (texto do CSV) é obrigatório" });
+    const resultado = await conciliarLiquidacao(conteudo);
+    res.json({ ok: true, ...resultado });
+  } catch (e) {
+    console.error("[vendas/csv] erro:", e);
+    if (!res.headersSent) res.status(500).json({ erro: String(e) });
+  }
+});
+
+app.get("/api/vendas/conciliacoes-pendentes", async (req, res) => {
+  corsVendas(res, "GET");
+  if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
+  try {
+    const pendentes = await listarConciliacoesPendentes();
+    res.json({ pendentes });
+  } catch (e) {
+    console.error("[vendas/conciliacoes-pendentes] erro:", e);
+    res.status(500).json({ erro: String(e) });
+  }
+});
+
+// Resolve manualmente uma linha do CSV que não bateu automaticamente, vinculando a um boleto.
+// body: { boletoId: number }
+app.post("/api/vendas/conciliacoes-pendentes/:id/resolver", async (req, res) => {
+  corsVendas(res, "POST");
+  if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
+  try {
+    const id = Number(req.params.id);
+    const boletoId = Number(req.body?.boletoId);
+    if (!id || !boletoId) return res.status(400).json({ erro: "id e boletoId são obrigatórios" });
+    await resolverConciliacaoPendente(id, boletoId, dataSP());
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[vendas/conciliacoes-pendentes/resolver] erro:", e);
+    if (!res.headersSent) res.status(500).json({ erro: String(e) });
   }
 });
 
