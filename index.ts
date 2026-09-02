@@ -15,14 +15,17 @@ import { conciliarLiquidacao } from "./csv-liquidacao.js";
 import {
   salvarNfVenda,
   subirArquivoXmlVenda,
-  listarNfsVenda,
+  listarNfsVendaComSaldo,
   buscarNfVendaPorId,
   dividirNfEmBoletos,
   listarBoletosVenda,
   listarBoletosPorNf,
+  listarBoletosPorRelatorio,
   listarConciliacoesPendentes,
   resolverConciliacaoPendente,
   buscarRelatorioPorId,
+  saldoDaNf,
+  cancelarBoleto,
 } from "./vendas.js";
 import { gerarPDFBoletos, gerarXLSXBoletos, type ItemRelatorioBoleto } from "./relatorio-boletos.js";
 
@@ -692,7 +695,10 @@ app.get("/api/vendas/nfs", async (req, res) => {
   if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
   try {
     const status = (req.query.status as string) || undefined;
-    const nfs = await listarNfsVenda(status === "pendente" || status === "dividida" ? status : undefined);
+    // situacao é calculada (emitido/liquidado/disponível), não o campo bruto do
+    // banco — reflete o saldo de verdade, inclusive depois de cancelar boleto.
+    const situacaoValida = status === "nao_utilizada" || status === "parcial" || status === "utilizada" ? status : undefined;
+    const nfs = await listarNfsVendaComSaldo(situacaoValida);
     res.json({ nfs });
   } catch (e) {
     console.error("[vendas/nfs] erro:", e);
@@ -777,16 +783,24 @@ app.post("/api/vendas/nfs/:id/dividir", async (req, res) => {
     const itens: { banco: string | null; valor: number }[] = Array.isArray(req.body?.itens) ? req.body.itens : [];
     if (!nfId || itens.length === 0) return res.status(400).json({ erro: "nf inválida ou nenhum item pra dividir" });
 
-    const nf = await buscarNfVendaPorId(nfId);
-    if (!nf) return res.status(404).json({ erro: "NF não encontrada" });
-    if (nf.status === "dividida") return res.status(409).json({ erro: "esta NF já foi dividida antes" });
+    const saldo = await saldoDaNf(nfId);
+    if (!saldo) return res.status(404).json({ erro: "NF não encontrada" });
 
     const itensValidos = itens
       .map((it) => ({ banco: it.banco || null, valor: Number(it.valor) }))
       .filter((it) => Number.isFinite(it.valor) && it.valor > 0);
     if (itensValidos.length === 0) return res.status(400).json({ erro: "nenhum valor válido informado" });
 
-    const { boletos, relatorioId } = await dividirNfEmBoletos(nfId, nf.numero_nf, itensValidos);
+    // Não deixa alocar mais do que o saldo disponível da NF (pode ter sido
+    // parcialmente usada antes, ou ter boleto cancelado que devolveu espaço).
+    const somaPedida = Number(itensValidos.reduce((s, it) => s + it.valor, 0).toFixed(2));
+    if (somaPedida > saldo.disponivel + 0.01) {
+      return res.status(409).json({
+        erro: `Soma dos boletos (${somaPedida.toFixed(2)}) é maior que o saldo disponível da NF (${saldo.disponivel.toFixed(2)}).`,
+      });
+    }
+
+    const { boletos, relatorioId } = await dividirNfEmBoletos(nfId, saldo.numero_nf, itensValidos);
     res.json({ ok: true, boletos, relatorioId });
   } catch (e) {
     console.error("[vendas/dividir] erro:", e);
@@ -800,12 +814,30 @@ app.get("/api/vendas/boletos", async (req, res) => {
   try {
     const status = (req.query.status as string) || undefined;
     const boletos = await listarBoletosVenda(
-      status === "aberto" || status === "pago" || status === "nao_conciliado" ? status : undefined,
+      status === "aberto" || status === "pago" || status === "nao_conciliado" || status === "cancelado" ? status : undefined,
     );
     res.json({ boletos });
   } catch (e) {
     console.error("[vendas/boletos] erro:", e);
     res.status(500).json({ erro: String(e) });
+  }
+});
+
+// Cancela um boleto ainda em aberto (nunca um já pago), devolvendo aquele
+// valor pro saldo disponível da NF — é assim que se "abre espaço" pra
+// dividir de novo quando um boleto emitido não foi pago.
+app.post("/api/vendas/boletos/:id/cancelar", async (req, res) => {
+  corsVendas(res, "POST");
+  if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ erro: "id inválido" });
+    const r = await cancelarBoleto(id);
+    if (!r.ok) return res.status(409).json({ erro: "só dá pra cancelar boleto em aberto (não pago nem já cancelado)" });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[vendas/boletos/cancelar] erro:", e);
+    if (!res.headersSent) res.status(500).json({ erro: String(e) });
   }
 });
 
@@ -821,7 +853,9 @@ app.get("/api/vendas/relatorio/:relatorioId", async (req, res) => {
     if (!relatorio) return res.status(404).json({ erro: "relatório não encontrado" });
     const nf = await buscarNfVendaPorId(relatorio.nf_id);
     if (!nf) return res.status(404).json({ erro: "NF do relatório não encontrada" });
-    const boletos = await listarBoletosPorNf(relatorio.nf_id);
+    // Só os boletos DESSA divisão — não de outras divisões da mesma NF (agora
+    // que uma NF pode ser dividida mais de uma vez, usar nf_id misturaria tudo).
+    const boletos = await listarBoletosPorRelatorio(relatorioId);
 
     const itens: ItemRelatorioBoleto[] = boletos.map((b) => ({
       data: nf.data,
