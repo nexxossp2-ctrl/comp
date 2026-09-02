@@ -9,7 +9,7 @@ export interface Comprovante {
   message_id: string;
   valor: number | null;
   data: string; // YYYY-MM-DD
-  /** "pago" = comprovante de pagamento já feito. "solicitado" = boleto/cobrança em aberto. */
+  /** "pago" = comprovante de pagamento já feito. "solicitado" = boleto/cobrança/NF em aberto. */
   status: "pago" | "solicitado";
   vencimento?: string | null; // YYYY-MM-DD, só para status="solicitado"
   beneficiario?: string | null;
@@ -19,6 +19,10 @@ export interface Comprovante {
   file_name?: string | null;
   mime_type?: string | null;
   raw_valor?: string | null;
+  /** Tipo real identificado ("pago" | "boleto" | "nf") — mais granular que "status", usado só pra exibir a etiqueta no dashboard. */
+  doc_tipo?: string | null;
+  /** Número da nota fiscal, só quando doc_tipo="nf". */
+  numero_nf?: string | null;
 }
 
 /** Sobe o arquivo do comprovante pro Storage privado. Retorna o caminho (path). */
@@ -122,9 +126,12 @@ export interface ComprovanteRow {
   beneficiario: string | null;
   remetente: string | null;
   arquivo_url: string | null;
+  doc_tipo: string | null;
+  numero_nf: string | null;
 }
 
-const COLUNAS_LISTAGEM = "message_id, valor, data, status, vencimento, beneficiario, remetente, arquivo_url";
+const COLUNAS_LISTAGEM =
+  "message_id, valor, data, status, vencimento, beneficiario, remetente, arquivo_url, doc_tipo, numero_nf";
 
 /** Comprovantes PAGOS de um dia (YYYY-MM-DD), na ordem em que chegaram. Usado pelo relatório diário. */
 export async function comprovantesDoDia(data: string): Promise<ComprovanteRow[]> {

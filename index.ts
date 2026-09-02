@@ -73,6 +73,8 @@ async function salvarProcessado(
       file_name: meta.fileName ?? null,
       mime_type: meta.mime,
       raw_valor: ex.raw,
+      doc_tipo: ex.tipo,
+      numero_nf: ex.numero_nf,
     });
   } catch (e) {
     console.error(`[supabase] falha ao salvar ${meta.identificador}:`, e);
@@ -342,6 +344,10 @@ app.get("/api/comprovantes", async (req, res) => {
         remetente: r.remetente,
         identificador: r.message_id,
         arquivo: r.arquivo_url ? await linkAssinado(r.arquivo_url) : null,
+        // doc_tipo mais granular que status ("boleto" | "nf"); registros antigos (antes dessa
+        // coluna existir) vêm null e o front trata como "boleto" pra manter compatibilidade.
+        docTipo: r.doc_tipo || (r.status === "solicitado" ? "boleto" : r.status),
+        numeroNf: r.numero_nf,
       })),
     );
 
@@ -434,7 +440,7 @@ app.post("/api/upload", async (req, res) => {
     if (r.status === "duplicado") {
       return res.status(200).json({ ok: false, motivo: "Este comprovante já foi enviado antes." });
     }
-    return res.json({ ok: true, valor: ex.valor, beneficiario: ex.beneficiario });
+    return res.json({ ok: true, valor: ex.valor, beneficiario: ex.beneficiario, tipo: ex.tipo });
   } catch (e) {
     console.error("[upload] erro:", e);
     if (!res.headersSent) res.status(500).json({ erro: String(e) });
