@@ -351,11 +351,16 @@ app.get("/api/comprovantes", async (req, res) => {
       })),
     );
 
-    const total = comprovantes.reduce((s, c) => s + (Number(c.valor) || 0), 0);
+    // CT-e não entra nas somas (total e por beneficiário): ele acompanha uma ou mais NFs
+    // que já vão ser cobradas juntas num boleto consolidado — contar o CT-e também
+    // duplicaria o valor daquele boleto. Continua na lista (fica visível pra consulta).
+    const contaValor = (c: (typeof comprovantes)[number]) => c.docTipo !== "cte";
+
+    const total = comprovantes.filter(contaValor).reduce((s, c) => s + (Number(c.valor) || 0), 0);
 
     // Soma agrupada por beneficiário
     const mapa = new Map<string, { total: number; quantidade: number }>();
-    for (const c of comprovantes) {
+    for (const c of comprovantes.filter(contaValor)) {
       const nome = c.beneficiario || "(sem beneficiário)";
       const atual = mapa.get(nome) || { total: 0, quantidade: 0 };
       atual.total += Number(c.valor) || 0;
