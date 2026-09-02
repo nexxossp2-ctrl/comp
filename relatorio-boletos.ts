@@ -12,8 +12,12 @@ export interface ItemRelatorioBoleto {
   valor: number;
 }
 
-/** Gera o PDF do relatório de solicitação de boletos (um por divisão feita). */
-export function gerarPDFBoletos(relatorioId: number, itens: ItemRelatorioBoleto[]): Promise<Buffer> {
+/**
+ * Gera o PDF do relatório de solicitação de boletos. `titulo` é o texto que
+ * aparece no topo — normalmente "solicitação #N" (uma divisão específica) ou
+ * algo como "boletos selecionados (5)" (relatório consolidado, várias NFs/divisões).
+ */
+export function gerarPDFBoletos(titulo: string, itens: ItemRelatorioBoleto[]): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40, size: "A4" });
     const chunks: Buffer[] = [];
@@ -23,7 +27,7 @@ export function gerarPDFBoletos(relatorioId: number, itens: ItemRelatorioBoleto[
 
     const total = itens.reduce((s, i) => s + (Number(i.valor) || 0), 0);
 
-    doc.fontSize(18).text(`Relatório de solicitação #${relatorioId}`, { align: "left" });
+    doc.fontSize(18).text(`Relatório de ${titulo}`, { align: "left" });
     doc.moveDown(0.3);
     doc.fontSize(10).fillColor("#666").text(`Gerado em ${dataBR(new Date().toISOString().slice(0, 10))}`);
     doc.moveDown(1);
@@ -70,10 +74,12 @@ export function gerarPDFBoletos(relatorioId: number, itens: ItemRelatorioBoleto[
   });
 }
 
-/** Gera o XLSX do relatório de solicitação de boletos. */
-export async function gerarXLSXBoletos(relatorioId: number, itens: ItemRelatorioBoleto[]): Promise<Buffer> {
+/** Gera o XLSX do relatório de solicitação de boletos. `titulo` vira o nome da aba (sanitizado). */
+export async function gerarXLSXBoletos(titulo: string, itens: ItemRelatorioBoleto[]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet(`Solicitação #${relatorioId}`);
+  // Nome de aba do Excel: máx 31 caracteres, sem [ ] : * ? / \
+  const nomeAba = titulo.replace(/[[\]:*?/\\]/g, "-").slice(0, 31) || "Relatório";
+  const ws = wb.addWorksheet(nomeAba);
 
   ws.columns = [
     { header: "Data", key: "data", width: 14 },

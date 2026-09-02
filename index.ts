@@ -26,6 +26,7 @@ import {
   buscarRelatorioPorId,
   saldoDaNf,
   cancelarBoleto,
+  buscarBoletosPorIds,
 } from "./vendas.js";
 import { gerarPDFBoletos, gerarXLSXBoletos, type ItemRelatorioBoleto } from "./relatorio-boletos.js";
 
@@ -813,9 +814,13 @@ app.get("/api/vendas/boletos", async (req, res) => {
   if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
   try {
     const status = (req.query.status as string) || undefined;
-    const boletos = await listarBoletosVenda(
-      status === "aberto" || status === "pago" || status === "nao_conciliado" || status === "cancelado" ? status : undefined,
-    );
+    const inicio = (req.query.inicio as string) || undefined;
+    const fim = (req.query.fim as string) || undefined;
+    const boletos = await listarBoletosVenda({
+      status: status === "aberto" || status === "pago" || status === "nao_conciliado" || status === "cancelado" ? status : undefined,
+      inicio,
+      fim,
+    });
     res.json({ boletos });
   } catch (e) {
     console.error("[vendas/boletos] erro:", e);
@@ -867,19 +872,63 @@ app.get("/api/vendas/relatorio/:relatorioId", async (req, res) => {
       valor: b.valor,
     }));
 
+    const titulo = `solicitação #${relatorioId}`;
     if (formato === "xlsx" || formato === "xls") {
-      const buf = await gerarXLSXBoletos(relatorioId, itens);
+      const buf = await gerarXLSXBoletos(titulo, itens);
       res.set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.set("Content-Disposition", `attachment; filename="solicitacao-${relatorioId}.xlsx"`);
       return res.send(buf);
     } else {
-      const buf = await gerarPDFBoletos(relatorioId, itens);
+      const buf = await gerarPDFBoletos(titulo, itens);
       res.set("Content-Type", "application/pdf");
       res.set("Content-Disposition", `attachment; filename="solicitacao-${relatorioId}.pdf"`);
       return res.send(buf);
     }
   } catch (e) {
     console.error("[vendas/relatorio] erro:", e);
+    if (!res.headersSent) res.status(500).json({ erro: String(e) });
+  }
+});
+
+// Relatório CONSOLIDADO de boletos selecionados pela pessoa (checkbox na aba
+// Boletos) — pode misturar boletos de NFs e divisões diferentes, ao contrário
+// do /api/vendas/relatorio/:relatorioId (que é sempre uma única divisão).
+// body: { ids: [...], formato: "pdf" | "xlsx" }
+app.post("/api/vendas/boletos/relatorio", async (req, res) => {
+  corsVendas(res, "POST");
+  if (!autorizadoDashboard(req)) return res.status(401).json({ erro: "não autorizado" });
+  try {
+    const ids: number[] = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Number.isFinite) : [];
+    const formato = ((req.body?.formato as string) || "pdf").toLowerCase();
+    if (ids.length === 0) return res.status(400).json({ erro: "nenhum boleto selecionado" });
+
+    const boletos = await buscarBoletosPorIds(ids);
+    if (boletos.length === 0) return res.status(404).json({ erro: "nenhum dos boletos selecionados foi encontrado" });
+
+    const itens: ItemRelatorioBoleto[] = boletos.map((b) => ({
+      data: b.nf?.data || "",
+      numeroNf: b.nf?.numero_nf || "-",
+      cnpj: b.nf?.cnpj || null,
+      cliente: b.nf?.cliente || null,
+      seuNumero: b.seu_numero,
+      banco: b.banco,
+      valor: b.valor,
+    }));
+
+    const titulo = `boletos selecionados (${itens.length})`;
+    if (formato === "xlsx" || formato === "xls") {
+      const buf = await gerarXLSXBoletos(titulo, itens);
+      res.set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.set("Content-Disposition", `attachment; filename="boletos-selecionados.xlsx"`);
+      return res.send(buf);
+    } else {
+      const buf = await gerarPDFBoletos(titulo, itens);
+      res.set("Content-Type", "application/pdf");
+      res.set("Content-Disposition", `attachment; filename="boletos-selecionados.pdf"`);
+      return res.send(buf);
+    }
+  } catch (e) {
+    console.error("[vendas/boletos/relatorio] erro:", e);
     if (!res.headersSent) res.status(500).json({ erro: String(e) });
   }
 });

@@ -220,16 +220,56 @@ export async function buscarRelatorioPorId(id: number): Promise<{ id: number; nf
   return data ?? null;
 }
 
-/** Lista boletos de venda, mais recentes primeiro. Filtro opcional por status. */
-export async function listarBoletosVenda(status?: "aberto" | "pago" | "nao_conciliado" | "cancelado"): Promise<
-  (BoletoVenda & { nf: Pick<NfVenda, "numero_nf" | "cliente" | "cnpj"> | null })[]
-> {
+/**
+ * "2026-08-20" -> "2026-08-21" (dia seguinte, mesmo formato). Usado pra
+ * montar o limite superior (exclusivo) de um filtro de data.
+ */
+function addDiaISO(dataIso: string): string {
+  const [y, m, d] = dataIso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
+ * "2026-08-20" (dia local em America/Sao_Paulo, UTC-3 fixo — Brasil não tem
+ * mais horário de verão) -> instante UTC da meia-noite desse dia em SP.
+ * Usado pra filtrar created_at (timestamptz) por "dia da solicitação" sem
+ * errar o dia por causa do fuso.
+ */
+function inicioDiaSpEmUtc(dataIso: string): string {
+  return `${dataIso}T03:00:00.000Z`;
+}
+
+/** Lista boletos de venda, mais recentes primeiro. Filtros opcionais por status e por
+ * período de "data de solicitação" (created_at, comparado no fuso de SP). */
+export async function listarBoletosVenda(opts?: {
+  status?: "aberto" | "pago" | "nao_conciliado" | "cancelado";
+  inicio?: string; // YYYY-MM-DD
+  fim?: string; // YYYY-MM-DD
+}): Promise<(BoletoVenda & { nf: Pick<NfVenda, "numero_nf" | "cliente" | "cnpj"> | null })[]> {
   let q = supabase
     .from("boletos_venda")
     .select("*, nf:nfs_venda(numero_nf, cliente, cnpj)")
     .order("created_at", { ascending: false });
-  if (status) q = q.eq("status", status);
+  if (opts?.status) q = q.eq("status", opts.status);
+  if (opts?.inicio) q = q.gte("created_at", inicioDiaSpEmUtc(opts.inicio));
+  if (opts?.fim) q = q.lt("created_at", inicioDiaSpEmUtc(addDiaISO(opts.fim)));
   const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as any;
+}
+
+/** Boletos por uma lista de ids, com os dados da NF juntos — usado pra montar
+ * um relatório consolidado de vários boletos escolhidos manualmente (aba Boletos). */
+export async function buscarBoletosPorIds(
+  ids: number[],
+): Promise<(BoletoVenda & { nf: Pick<NfVenda, "numero_nf" | "cliente" | "cnpj" | "data"> | null })[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from("boletos_venda")
+    .select("*, nf:nfs_venda(numero_nf, cliente, cnpj, data)")
+    .in("id", ids);
   if (error) throw error;
   return (data ?? []) as any;
 }
