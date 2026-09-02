@@ -6,7 +6,6 @@ import archiver from "archiver";
 import { extrairBase64, baixarBase64, type Extracao } from "./extract.js";
 import { salvarComprovante, listarComprovantes, subirArquivo, linkAssinado, comprovantesPorIds, baixarArquivo, excluirComprovante } from "./supabase.js";
 import { gerarPDF, gerarXLSX, type ItemRelatorio } from "./relatorio-arquivo.js";
-import { appendLinha } from "./sheets.js";
 import { gerarRelatorio } from "./report.js";
 import { enviarEmail, enviarWhatsapp, enviarEmailComAnexos } from "./send.js";
 import { dataSP, dataBR } from "./util.js";
@@ -25,7 +24,7 @@ type ResultadoProc =
 
 /**
  * Processamento único usado pelo WhatsApp e pelo upload:
- * classifica pago/boleto/outro, deduplica e grava no banco (+ planilha, só quando pago).
+ * classifica pago/boleto/outro, deduplica e grava no banco (Supabase).
  * - tipo "pago": comprovante de pagamento já feito.
  * - tipo "boleto": cobrança/fatura em aberto — vira uma "solicitação" (status="solicitado").
  * - tipo "outro": não é documento financeiro, é descartado (não grava nada).
@@ -59,42 +58,42 @@ async function salvarProcessado(
   const dataValida = /^\d{4}-\d{2}-\d{2}$/.test(dataCandidata || "");
   const dataFinal = dataValida ? (dataCandidata as string) : meta.data;
 
-  const inserido = await salvarComprovante({
-    message_id: meta.identificador,
-    valor: ex.valor,
-    data: dataFinal,
-    status,
-    vencimento: status === "solicitado" ? ex.data_vencimento : null,
-    beneficiario: ex.beneficiario,
-    remetente: meta.remetente,
-    fingerprint,
-    arquivo_url,
-    file_name: meta.fileName ?? null,
-    mime_type: meta.mime,
-    raw_valor: ex.raw,
-  });
+  let inserido: boolean;
+  try {
+    inserido = await salvarComprovante({
+      message_id: meta.identificador,
+      valor: ex.valor,
+      data: dataFinal,
+      status,
+      vencimento: status === "solicitado" ? ex.data_vencimento : null,
+      beneficiario: ex.beneficiario,
+      remetente: meta.remetente,
+      fingerprint,
+      arquivo_url,
+      file_name: meta.fileName ?? null,
+      mime_type: meta.mime,
+      raw_valor: ex.raw,
+    });
+  } catch (e) {
+    console.error(`[supabase] falha ao salvar ${meta.identificador}:`, e);
+    // Sem isso, uma falha real do Supabase (fora de ar, chave errada, etc.)
+    // só aparecia no log do Railway — ninguém ficava sabendo que um
+    // comprovante recebido não tinha sido salvo. Best-effort: se o próprio
+    // aviso falhar, só loga — não pode mascarar o erro original.
+    try {
+      await enviarWhatsapp(
+        `⚠️ Falha ao salvar comprovante de ${meta.remetente || "remetente desconhecido"} ` +
+          `(id ${meta.identificador}). Pode ter que pedir pra reenviar. Erro: ${String(e).slice(0, 200)}`,
+      );
+    } catch (alertErr) {
+      console.error("[alerta] falha ao enviar aviso de WhatsApp:", alertErr);
+    }
+    throw e;
+  }
 
   if (!inserido) {
     console.log(`[dup] ${meta.identificador} já processado, ignorado`);
     return { status: "duplicado" };
-  }
-
-  // Planilha continua só com o que já foi pago (mantém o relatório/uso atual sem mudanças).
-  // Best-effort: o comprovante JÁ foi salvo no banco acima — se a planilha falhar
-  // (permissão, ID errado, etc.), isso não pode derrubar a resposta como se o
-  // comprovante inteiro tivesse falhado. Só loga e segue.
-  if (status === "pago") {
-    try {
-      await appendLinha({
-        data: dataFinal,
-        valor: ex.valor,
-        identificador: meta.identificador,
-        remetente: meta.remetente,
-        beneficiario: ex.beneficiario,
-      });
-    } catch (e) {
-      console.error(`[sheets] falha ao gravar ${meta.identificador} na planilha:`, e);
-    }
   }
 
   console.log(`[ok] ${meta.identificador} status=${status} valor=${ex.valor ?? "null"} data=${dataFinal} (chegada=${meta.data})`);
