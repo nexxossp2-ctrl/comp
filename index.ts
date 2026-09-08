@@ -76,9 +76,14 @@ async function salvarProcessado(
     ? await subirArquivo(meta.base64, meta.mime, meta.identificador)
     : null;
 
-  // Data do registro: data de pagamento (pago), vencimento (boleto) — se vierem válidas;
-  // senão cai pra data de chegada da mensagem.
-  const dataCandidata = status === "pago" ? ex.data_pagamento : ex.data_vencimento;
+  // Data do registro: pra "pago", é a data de pagamento lida do comprovante (se vier válida).
+  // Pra "solicitado" (boleto/NF/CT-e em aberto), é SEMPRE a data de chegada da mensagem — não
+  // o vencimento. O vencimento é uma informação diferente (quando vence, não quando chegou) e
+  // já fica guardado à parte na coluna "vencimento"; usar ele aqui misturava os dois conceitos
+  // e quebrava o filtro por data/"Hoje" do dashboard (um boleto recebido dias atrás com
+  // vencimento pra hoje aparecia no filtro de "hoje", e um boleto recebido hoje com vencimento
+  // futuro sumia do filtro de "hoje").
+  const dataCandidata = status === "pago" ? ex.data_pagamento : null;
   const dataValida = /^\d{4}-\d{2}-\d{2}$/.test(dataCandidata || "");
   const dataFinal = dataValida ? (dataCandidata as string) : meta.data;
 

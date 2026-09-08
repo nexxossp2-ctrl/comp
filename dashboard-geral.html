@@ -295,7 +295,7 @@
       <thead>
         <tr>
           <th class="check"><input type="checkbox" id="checkTodosSol" /></th>
-          <th>Tipo</th><th>Data</th><th>Beneficiário</th><th>Nº NF</th><th>Quem enviou</th><th>Valor</th><th></th>
+          <th>Tipo</th><th>Data</th><th>Vencimento</th><th>Beneficiário</th><th>Nº NF</th><th>Quem enviou</th><th>Valor</th><th></th>
         </tr>
       </thead>
       <tbody id="tbodySolicitado"></tbody>
@@ -768,6 +768,7 @@
       <td class="check"><input type="checkbox" class="chk-item" data-id="${esc(item.identificador)}" ${selecionadosSol.has(item.identificador) ? "checked" : ""} /></td>
       <td>${badgeTipoHtml(item.docTipo)}</td>
       <td class="data">${brDate(item.data)}</td>
+      <td class="data">${item.vencimento ? brDate(item.vencimento) : "-"}</td>
       <td>${esc(item.beneficiario) || "-"}</td>
       <td>${esc(item.numeroNf) || "-"}</td>
       <td>${esc(item.remetente) || "-"}</td>
