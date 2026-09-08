@@ -215,12 +215,12 @@
     <div class="grid-topo">
       <div class="duas-cards">
         <div class="card-total">
-          <div class="label">Total pago no filtro</div>
+          <div class="label" id="pagoTotalLabel">Valor pago hoje</div>
           <div class="value" id="pagoTotal">R$ 0,00</div>
           <div class="count" id="pagoQtd">0 comprovantes</div>
         </div>
         <div class="card-total pend clicavel" id="cardSolicitadoAberto" title="Clique para ver essas solicitações">
-          <div class="label">Total solicitado no filtro</div>
+          <div class="label" id="pagoSolicitadoLabel">Valor solicitado hoje</div>
           <div class="value" id="pagoSolicitadoTotal">R$ 0,00</div>
           <div class="count" id="pagoSolicitadoQtd">0 solicitações</div>
           <div class="dica">Clique para ver</div>
@@ -488,6 +488,18 @@
     const inicio = document.getElementById("pagoInicio").value;
     const fim = document.getElementById("pagoFim").value;
     const beneficiario = document.getElementById("pagoBeneficiario").value.trim();
+
+    // Texto do card muda com o período escolhido, pra nunca dizer "hoje" mostrando
+    // outro dia: "hoje" só quando início=fim=hoje, senão mostra a data ou "no período".
+    const rotulo = (() => {
+      if(inicio && inicio === fim){
+        return inicio === hojeISO() ? "hoje" : `em ${brDate(inicio)}`;
+      }
+      if(!inicio && !fim) return "(todos os dias)";
+      return "no período";
+    })();
+    document.getElementById("pagoTotalLabel").textContent = `Valor pago ${rotulo}`;
+    document.getElementById("pagoSolicitadoLabel").textContent = `Valor solicitado ${rotulo}`;
 
     const btn = document.getElementById("btnAtualizarPago");
     btn.disabled = true;
