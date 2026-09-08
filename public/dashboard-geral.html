@@ -81,6 +81,9 @@
   .card-total .value{font-size:28px;font-weight:700;letter-spacing:-.02em}
   .card-total .count{font-size:13px;opacity:.65;margin-top:6px}
   .card-total.pend{background:var(--pend)}
+  .card-total.clicavel{cursor:pointer}
+  .card-total.clicavel:hover{opacity:.9}
+  .card-total .dica{font-size:12px;opacity:.65;margin-top:8px;text-decoration:underline}
 
   .painel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
   .painel h3{margin:0 0 12px;font-size:14px}
@@ -212,14 +215,15 @@
     <div class="grid-topo">
       <div class="duas-cards">
         <div class="card-total">
-          <div class="label">Total pago no filtro</div>
+          <div class="label" id="pagoTotalLabel">Valor pago hoje</div>
           <div class="value" id="pagoTotal">R$ 0,00</div>
           <div class="count" id="pagoQtd">0 comprovantes</div>
         </div>
-        <div class="card-total pend">
-          <div class="label">Total solicitado em aberto</div>
+        <div class="card-total pend clicavel" id="cardSolicitadoAberto" title="Clique para ver essas solicitações">
+          <div class="label" id="pagoSolicitadoLabel">Valor solicitado hoje</div>
           <div class="value" id="pagoSolicitadoTotal">R$ 0,00</div>
           <div class="count" id="pagoSolicitadoQtd">0 solicitações</div>
+          <div class="dica">Clique para ver</div>
         </div>
       </div>
       <div class="painel">
@@ -291,7 +295,7 @@
       <thead>
         <tr>
           <th class="check"><input type="checkbox" id="checkTodosSol" /></th>
-          <th>Tipo</th><th>Data</th><th>Beneficiário</th><th>Nº NF</th><th>Quem enviou</th><th>Valor</th><th></th>
+          <th>Tipo</th><th>Data</th><th>Vencimento</th><th>Beneficiário</th><th>Nº NF</th><th>Quem enviou</th><th>Valor</th><th></th>
         </tr>
       </thead>
       <tbody id="tbodySolicitado"></tbody>
@@ -485,18 +489,31 @@
     const fim = document.getElementById("pagoFim").value;
     const beneficiario = document.getElementById("pagoBeneficiario").value.trim();
 
+    // Texto do card muda com o período escolhido, pra nunca dizer "hoje" mostrando
+    // outro dia: "hoje" só quando início=fim=hoje, senão mostra a data ou "no período".
+    const rotulo = (() => {
+      if(inicio && inicio === fim){
+        return inicio === hojeISO() ? "hoje" : `em ${brDate(inicio)}`;
+      }
+      if(!inicio && !fim) return "(todos os dias)";
+      return "no período";
+    })();
+    document.getElementById("pagoTotalLabel").textContent = `Valor pago ${rotulo}`;
+    document.getElementById("pagoSolicitadoLabel").textContent = `Valor solicitado ${rotulo}`;
+
     const btn = document.getElementById("btnAtualizarPago");
     btn.disabled = true;
     const original = btn.textContent;
     btn.textContent = "Carregando...";
 
     try {
-      // O total solicitado é saldo em aberto (não "o que aconteceu num período"), por isso
-      // não usa o filtro de data da aba Pago — senão o botão "Hoje" fazia esse total sumir
-      // pra qualquer solicitação que não foi datada hoje. Mantém só o filtro de beneficiário.
+      // O card de solicitado usa o MESMO filtro de data da aba Pago (início/fim/Hoje) —
+      // clicar em "Hoje" mostra só o que é de hoje nos dois; escolher outro dia mostra só
+      // daquele dia. Antes ficava sempre em "tudo em aberto" independente da data, mas foi
+      // pedido explicitamente pra não misturar dias diferentes num "hoje" só.
       const [dados, dadosSolicitado] = await Promise.all([
         buscarLista("pago", { inicio, fim, beneficiario }),
-        buscarLista("solicitado", { beneficiario }),
+        buscarLista("solicitado", { inicio, fim, beneficiario }),
       ]);
       if(!dados){ abrirConfig(); return; }
       if(dados.erro){ mostrarAviso(dados.erro); renderizarPago([], 0, 0, []); }
@@ -549,6 +566,16 @@
     document.getElementById("pagoInicio").value = hojeISO();
     document.getElementById("pagoFim").value = hojeISO();
     carregarPago();
+  });
+
+  // Clicar no card "Total solicitado no filtro" leva direto pra aba Solicitações já
+  // com o MESMO filtro de data/beneficiário que estava na aba Pago — pra bater exatamente
+  // com o número que a pessoa acabou de ver no card (nada de trocar de aba e ver outra coisa).
+  document.getElementById("cardSolicitadoAberto").addEventListener("click", () => {
+    document.getElementById("solInicio").value = document.getElementById("pagoInicio").value;
+    document.getElementById("solFim").value = document.getElementById("pagoFim").value;
+    document.getElementById("solBeneficiario").value = document.getElementById("pagoBeneficiario").value;
+    ativarTab("solicitado");
   });
 
   document.getElementById("checkTodosPago").addEventListener("change", (ev) => {
@@ -753,6 +780,7 @@
       <td class="check"><input type="checkbox" class="chk-item" data-id="${esc(item.identificador)}" ${selecionadosSol.has(item.identificador) ? "checked" : ""} /></td>
       <td>${badgeTipoHtml(item.docTipo)}</td>
       <td class="data">${brDate(item.data)}</td>
+      <td class="data">${item.vencimento ? brDate(item.vencimento) : "-"}</td>
       <td>${esc(item.beneficiario) || "-"}</td>
       <td>${esc(item.numeroNf) || "-"}</td>
       <td>${esc(item.remetente) || "-"}</td>
