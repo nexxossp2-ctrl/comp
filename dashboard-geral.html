@@ -219,12 +219,6 @@
           <div class="value" id="pagoTotal">R$ 0,00</div>
           <div class="count" id="pagoQtd">0 comprovantes</div>
         </div>
-        <div class="card-total pend clicavel" id="cardSolicitadoAberto" title="Clique para ver essas solicitações">
-          <div class="label" id="pagoSolicitadoLabel">Valor solicitado hoje</div>
-          <div class="value" id="pagoSolicitadoTotal">R$ 0,00</div>
-          <div class="count" id="pagoSolicitadoQtd">0 solicitações</div>
-          <div class="dica">Clique para ver</div>
-        </div>
       </div>
       <div class="painel">
         <h3>Soma por beneficiário</h3>
@@ -499,7 +493,6 @@
       return "no período";
     })();
     document.getElementById("pagoTotalLabel").textContent = `Valor pago ${rotulo}`;
-    document.getElementById("pagoSolicitadoLabel").textContent = `Valor solicitado ${rotulo}`;
 
     const btn = document.getElementById("btnAtualizarPago");
     btn.disabled = true;
@@ -507,23 +500,10 @@
     btn.textContent = "Carregando...";
 
     try {
-      // O card de solicitado usa o MESMO filtro de data da aba Pago (início/fim/Hoje) —
-      // clicar em "Hoje" mostra só o que é de hoje nos dois; escolher outro dia mostra só
-      // daquele dia. Antes ficava sempre em "tudo em aberto" independente da data, mas foi
-      // pedido explicitamente pra não misturar dias diferentes num "hoje" só.
-      const [dados, dadosSolicitado] = await Promise.all([
-        buscarLista("pago", { inicio, fim, beneficiario }),
-        buscarLista("solicitado", { inicio, fim, beneficiario }),
-      ]);
+      const dados = await buscarLista("pago", { inicio, fim, beneficiario });
       if(!dados){ abrirConfig(); return; }
       if(dados.erro){ mostrarAviso(dados.erro); renderizarPago([], 0, 0, []); }
       else renderizarPago(dados.comprovantes || [], dados.total || 0, dados.quantidade || 0, dados.porBeneficiario || []);
-
-      if(dadosSolicitado && !dadosSolicitado.erro){
-        document.getElementById("pagoSolicitadoTotal").textContent = brl(dadosSolicitado.total || 0);
-        const q = dadosSolicitado.quantidade || 0;
-        document.getElementById("pagoSolicitadoQtd").textContent = q + (q === 1 ? " solicitação" : " solicitações");
-      }
     } catch(e){
       mostrarAviso(`Erro inesperado: ${e.message}`);
     } finally {
@@ -566,16 +546,6 @@
     document.getElementById("pagoInicio").value = hojeISO();
     document.getElementById("pagoFim").value = hojeISO();
     carregarPago();
-  });
-
-  // Clicar no card "Total solicitado no filtro" leva direto pra aba Solicitações já
-  // com o MESMO filtro de data/beneficiário que estava na aba Pago — pra bater exatamente
-  // com o número que a pessoa acabou de ver no card (nada de trocar de aba e ver outra coisa).
-  document.getElementById("cardSolicitadoAberto").addEventListener("click", () => {
-    document.getElementById("solInicio").value = document.getElementById("pagoInicio").value;
-    document.getElementById("solFim").value = document.getElementById("pagoFim").value;
-    document.getElementById("solBeneficiario").value = document.getElementById("pagoBeneficiario").value;
-    ativarTab("solicitado");
   });
 
   document.getElementById("checkTodosPago").addEventListener("change", (ev) => {
