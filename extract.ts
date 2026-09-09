@@ -16,9 +16,13 @@ Classifique e extraia:
 - valor: o valor da transação, do boleto/guia, o valor total da nota fiscal, ou o valor do frete do CT-e (número, ponto decimal).
 - beneficiario: o nome de quem RECEBE o pagamento. Num boleto normal é o favorecido/beneficiário/cedente. Numa nota fiscal ou CT-e é o EMITENTE (quem vendeu/prestou o serviço/transporte — é ele que vai receber). Numa DARF, GPS ou outra guia de tributo federal/estadual (documento de arrecadação, sem cedente nomeado) o beneficiário é sempre o nome do órgão arrecadador (ex: "Receita Federal", "INSS") — NUNCA o nome/razão social do contribuinte que está pagando, mesmo que seja o único nome próprio visível no documento.
 - numero_nf: se tipo="nf", o número da nota fiscal (como texto, ex: "12345"). Senão, null.
-- data_pagamento: se tipo="pago", a data em que o pagamento foi feito, no formato AAAA-MM-DD. Senão, null.
+- data_pagamento: se tipo="pago", a data em que o pagamento foi feito, no formato AAAA-MM-DD (use a TABELA DE MESES abaixo pra converter — nunca adivinhe). Senão, null.
 - hora_pagamento: se tipo="pago", o horário do pagamento, no formato HH:MM:SS (24h). Se não houver segundos no comprovante, use HH:MM:00. Se só tiver hora sem minutos, use HH:00:00. Senão, null.
-- data_vencimento: se tipo="boleto" ou tipo="nf" (quando a nota mostrar uma data de vencimento/pagamento), a data de vencimento, no formato AAAA-MM-DD. Senão, null.
+- data_vencimento: se tipo="boleto" ou tipo="nf" (quando a nota mostrar uma data de vencimento/pagamento), a data de vencimento, no formato AAAA-MM-DD (mesma tabela de meses). Senão, null.
+
+TABELA DE MESES (quando a data no documento vier por extenso ou abreviada, ex: "08 set. 2026", "22 de agosto de 2026" — use SEMPRE esta tabela pra converter o mês, nunca adivinhe nem reutilize o número do dia como se fosse o mês):
+jan/janeiro=01, fev/fevereiro=02, mar/março=03, abr/abril=04, mai/maio=05, jun/junho=06, jul/julho=07, ago/agosto=08, set/setembro=09, out/outubro=10, nov/novembro=11, dez/dezembro=12.
+Exemplo: "08 set. 2026" = dia 08, mês SETEMBRO (09) = "2026-09-08" (NÃO "2026-08-08" — "set" é setembro/09, não é o mesmo número do dia, e não é "ago"/agosto/08).
 
 Sinais de pagamento REALIZADO: "comprovante", "transferência realizada", "pagamento efetuado", "PIX enviado", data/hora da transação, ID/autenticação da transação.
 Sinais de boleto/guia A PAGAR: linha digitável, código de barras, "vencimento", "pagável em qualquer banco", "beneficiário/cedente" sem confirmação de pagamento, ou (pra DARF/GPS/DAS) brasão da Receita Federal/INSS com "Documento de Arrecadação".
